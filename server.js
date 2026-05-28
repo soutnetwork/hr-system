@@ -56,6 +56,14 @@ async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, team_task_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL, comment TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+      day DATE NOT NULL, shift TEXT DEFAULT '', note TEXT DEFAULT '',
+      UNIQUE(user_id, day)
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY, value TEXT
+    );
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
       message TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -68,6 +76,7 @@ async function initDb() {
   try { db.run(`ALTER TABLE users ADD COLUMN team TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE users ADD COLUMN is_lead INTEGER DEFAULT 0`); } catch(e){}
   try { db.run(`ALTER TABLE team_tasks ADD COLUMN team TEXT DEFAULT ''`); } catch(e){}
+  try { db.run(`ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''`); } catch(e){}
 
   if (!get('SELECT id FROM users WHERE username = ?', ['admin'])) {
     const hash = bcrypt.hashSync('admin123', 10);
@@ -97,6 +106,23 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   const token = jwt.sign({ id: user.id, username: user.username, role: user.role, full_name: user.full_name, daily_hours: user.daily_hours, team: user.team, is_lead: user.is_lead }, JWT_SECRET, { expiresIn: '12h' });
   res.json({ token, user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, job_title: user.job_title, daily_hours: user.daily_hours, team: user.team, is_lead: user.is_lead } });
+});
+
+// ===== PROFILE (any user — view/edit own profile, including avatar) =====
+app.get('/api/profile', authenticate, (req, res) => {
+  const u = get('SELECT id, username, full_name, role, job_title, team, is_lead, daily_hours, avatar FROM users WHERE id=?', [req.user.id]);
+  res.json(u || {});
+});
+app.put('/api/profile', authenticate, (req, res) => {
+  const { avatar, full_name } = req.body;
+  if (avatar !== undefined) {
+    if (avatar && avatar.length > 200000) return res.status(400).json({ error: 'Image too large (max ~150KB after encoding). Please use a smaller image.' });
+    run('UPDATE users SET avatar=? WHERE id=?', [avatar || '', req.user.id]);
+  }
+  if (full_name !== undefined && full_name.trim()) {
+    run('UPDATE users SET full_name=? WHERE id=?', [full_name.trim(), req.user.id]);
+  }
+  res.json({ success: true });
 });
 
 // ===== CHANGE PASSWORD (any logged-in user) =====
@@ -224,6 +250,35 @@ app.post('/api/team-tasks/:id/comments', authenticate, (req, res) => {
 // list of teammates (for assignee dropdowns) — available to leads too
 app.get('/api/teammates', authenticate, (req, res) => {
   res.json(all(`SELECT id, full_name, team FROM users WHERE role='employee' ORDER BY full_name`));
+});
+
+// ===== SHIFT TIME SETTINGS =====
+const DEFAULT_SHIFTS = JSON.stringify({ Morning: '09:00 - 17:00', Mid: '13:00 - 21:00', Night: '21:00 - 05:00' });
+app.get('/api/shift-settings', authenticate, (req, res) => {
+  const row = get(`SELECT value FROM settings WHERE key='shifts'`);
+  res.json(JSON.parse(row?.value || DEFAULT_SHIFTS));
+});
+app.put('/api/shift-settings', authenticate, requireAdmin, (req, res) => {
+  const { Morning, Mid, Night } = req.body;
+  const val = JSON.stringify({ Morning: Morning || '', Mid: Mid || '', Night: Night || '' });
+  if (get(`SELECT key FROM settings WHERE key='shifts'`)) run(`UPDATE settings SET value=? WHERE key='shifts'`, [val]);
+  else run(`INSERT INTO settings (key, value) VALUES ('shifts', ?)`, [val]);
+  res.json({ success: true });
+});
+
+// ===== SCHEDULE (monthly grid) =====
+app.get('/api/schedule', authenticate, (req, res) => {
+  const month = (req.query.month || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Invalid month' });
+  res.json(all(`SELECT user_id, day, shift, note FROM schedule WHERE day LIKE ?`, [month + '-%']));
+});
+app.put('/api/schedule', authenticate, requireAdmin, (req, res) => {
+  const { user_id, day, shift, note } = req.body;
+  if (!user_id || !day) return res.status(400).json({ error: 'Missing data' });
+  const existing = get(`SELECT id FROM schedule WHERE user_id=? AND day=?`, [user_id, day]);
+  if (existing) run(`UPDATE schedule SET shift=?, note=? WHERE id=?`, [shift || '', note || '', existing.id]);
+  else run(`INSERT INTO schedule (user_id, day, shift, note) VALUES (?,?,?,?)`, [user_id, day, shift || '', note || '']);
+  res.json({ success: true });
 });
 
 // ===== TEAM CHAT =====

@@ -108,6 +108,7 @@
 
   /* Team Board (Jira-like) */
   .board-cols { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .board-cols.board-single { grid-template-columns: 1fr; }
   .board-col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-height: 200px; }
   .board-col h4 { font-size: 13px; color: var(--gold-soft); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
   .board-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
@@ -131,6 +132,37 @@
   .chat-input-row { display: flex; gap: 8px; }
   .chat-input-row input { margin: 0; }
   .chat-input-row button { width: auto; padding: 0 22px; margin: 0; }
+
+  /* Schedule */
+  .sched-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sched-toolbar button { width: auto; padding: 9px 16px; margin: 0; }
+  .sched-month { font-size: 16px; font-weight: 600; color: var(--gold-soft); min-width: 160px; text-align: center; }
+  .sched-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  .sched-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+  .sched-table th, .sched-table td { border: 1px solid var(--border); padding: 0; text-align: center; }
+  .sched-table thead th { background: var(--panel2); padding: 8px 6px; font-size: 11px; color: var(--muted); position: sticky; top: 0; white-space: nowrap; }
+  .sched-name { background: var(--panel2); padding: 8px 12px !important; text-align: left !important; font-weight: 600; font-size: 12px; white-space: nowrap; position: sticky; left: 0; z-index: 2; min-width: 130px; }
+  .sched-table thead th.sched-name { z-index: 3; }
+  .sched-cell { width: 46px; height: 42px; cursor: pointer; font-size: 10px; font-weight: 700; transition: all .1s; }
+  .sched-cell:hover { outline: 2px solid var(--gold-soft); outline-offset: -2px; }
+  .sh-Morning { background: rgba(95,184,120,.22); color: #8fd4a3; }
+  .sh-Mid { background: rgba(107,140,206,.22); color: #9bb3e0; }
+  .sh-Night { background: rgba(155,120,206,.22); color: #c0a3e0; }
+  .sh-Off { background: rgba(214,88,79,.18); color: #e89089; }
+  .sh-empty { background: transparent; color: #44444c; }
+  .sched-weekend { background: rgba(255,255,255,.02); }
+  .sched-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; }
+  .sched-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .sched-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .sched-has-note { position: relative; }
+  .sched-has-note::after { content: ''; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold-soft); }
+
+  /* Avatar */
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--panel2); border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gold-soft); overflow: hidden; vertical-align: middle; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-lg { width: 100px; height: 100px; font-size: 36px; border-radius: 50%; }
+  .avatar-sm { width: 24px; height: 24px; font-size: 10px; }
+  .profile-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -154,11 +186,12 @@
   <div class="container">
     <div class="header">
       <div class="logo logo-sm"><div class="logo-mark">HR</div><div class="logo-text"><div class="lt-main">Sout Network</div><div class="lt-sub">Welcome <span id="emp-name">—</span></div></div></div>
-      <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
+      <div class="user-info"><button class="secondary" onclick="showProfile()">My Profile</button><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
       <button class="tab active" onclick="switchEmpTab('home',event)">My Day</button>
       <button class="tab" onclick="switchEmpTab('board',event)">Team Board</button>
+      <button class="tab" onclick="switchEmpTab('schedule',event)">Schedule</button>
       <button class="tab" onclick="switchEmpTab('chat',event)">Team Chat</button>
     </div>
 
@@ -201,10 +234,32 @@
       </div>
       <div class="card">
         <h3>Team Board</h3>
-        <div class="board-cols">
-          <div class="board-col"><h4>To Do</h4><div id="ecol-todo"></div></div>
-          <div class="board-col"><h4>In Progress</h4><div id="ecol-progress"></div></div>
-          <div class="board-col"><h4>Done</h4><div id="ecol-done"></div></div>
+        <div class="tabs" style="margin-bottom:14px;">
+          <button class="tab board-subtab active" data-col="todo" onclick="switchBoardCol('e','todo',event)">Open</button>
+          <button class="tab board-subtab" data-col="progress" onclick="switchBoardCol('e','progress',event)">In Progress</button>
+          <button class="tab board-subtab" data-col="done" onclick="switchBoardCol('e','done',event)">Done</button>
+        </div>
+        <div class="board-cols board-single">
+          <div class="board-col bcol-e bcol-todo"><h4>Open</h4><div id="ecol-todo"></div></div>
+          <div class="board-col bcol-e bcol-progress hidden"><h4>In Progress</h4><div id="ecol-progress"></div></div>
+          <div class="board-col bcol-e bcol-done hidden"><h4>Done</h4><div id="ecol-done"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="emp-tab-schedule" class="hidden">
+      <div class="card">
+        <div class="sched-toolbar">
+          <button class="secondary" onclick="schedPrev('e')">‹ Prev</button>
+          <span class="sched-month" id="esched-month"></span>
+          <button class="secondary" onclick="schedNext('e')">Next ›</button>
+        </div>
+        <div class="sched-wrap"><table class="sched-table" id="esched-table"></table></div>
+        <div class="sched-legend">
+          <span><i class="sh-Morning"></i>Morning <b id="el-morning" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="sh-Mid"></i>Mid <b id="el-mid" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="sh-Night"></i>Night <b id="el-night" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="sh-Off"></i>Off / Leave</span>
         </div>
       </div>
     </div>
@@ -224,12 +279,13 @@
   <div class="container">
     <div class="header">
       <div class="logo logo-sm"><div class="logo-mark">HR</div><div class="logo-text"><div class="lt-main">Sout Network</div><div class="lt-sub">ADMIN DASHBOARD</div></div></div>
-      <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
+      <div class="user-info"><button class="secondary" onclick="showProfile()">My Profile</button><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
       <button class="tab active" onclick="switchAdminTab('employees',event)">Employees</button>
       <button class="tab" onclick="switchAdminTab('ptasks',event)">Personal Tasks</button>
       <button class="tab" onclick="switchAdminTab('board',event)">Team Board</button>
+      <button class="tab" onclick="switchAdminTab('schedule',event)">Schedule</button>
       <button class="tab" onclick="switchAdminTab('chat',event)">Team Chat</button>
       <button class="tab" onclick="switchAdminTab('reports',event)">Reports</button>
     </div>
@@ -281,10 +337,43 @@
       </div>
       <div class="card">
         <h3>Team Board</h3>
-        <div class="board-cols">
-          <div class="board-col"><h4>To Do</h4><div id="acol-todo"></div></div>
-          <div class="board-col"><h4>In Progress</h4><div id="acol-progress"></div></div>
-          <div class="board-col"><h4>Done</h4><div id="acol-done"></div></div>
+        <div class="tabs" style="margin-bottom:14px;">
+          <button class="tab board-subtab active" data-col="todo" onclick="switchBoardCol('a','todo',event)">Open</button>
+          <button class="tab board-subtab" data-col="progress" onclick="switchBoardCol('a','progress',event)">In Progress</button>
+          <button class="tab board-subtab" data-col="done" onclick="switchBoardCol('a','done',event)">Done</button>
+        </div>
+        <div class="board-cols board-single">
+          <div class="board-col bcol-a bcol-todo"><h4>Open</h4><div id="acol-todo"></div></div>
+          <div class="board-col bcol-a bcol-progress hidden"><h4>In Progress</h4><div id="acol-progress"></div></div>
+          <div class="board-col bcol-a bcol-done hidden"><h4>Done</h4><div id="acol-done"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin-tab-schedule" class="hidden">
+      <div class="card">
+        <h3>Shift Times <span style="font-size:11px;color:var(--muted);">(define what each shift means)</span></h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+          <div><label>Morning</label><input id="shift-morning" type="text" placeholder="09:00 - 17:00"></div>
+          <div><label>Mid</label><input id="shift-mid" type="text" placeholder="13:00 - 21:00"></div>
+          <div><label>Night</label><input id="shift-night" type="text" placeholder="21:00 - 05:00"></div>
+        </div>
+        <button onclick="saveShifts()" style="margin-top:4px;">Save Shift Times</button>
+      </div>
+      <div class="card">
+        <div class="sched-toolbar">
+          <button class="secondary" onclick="schedPrev('a')">‹ Prev</button>
+          <span class="sched-month" id="asched-month"></span>
+          <button class="secondary" onclick="schedNext('a')">Next ›</button>
+          <span style="font-size:12px;color:var(--muted);margin-left:auto;">Click any cell to set shift / add note</span>
+        </div>
+        <div class="sched-wrap"><table class="sched-table" id="asched-table"></table></div>
+        <div class="sched-legend">
+          <span><i class="sh-Morning"></i>Morning</span>
+          <span><i class="sh-Mid"></i>Mid</span>
+          <span><i class="sh-Night"></i>Night</span>
+          <span><i class="sh-Off"></i>Off / Leave</span>
+          <span><i style="background:var(--gold-soft);"></i>Has note</span>
         </div>
       </div>
     </div>
@@ -335,6 +424,47 @@
     </select>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="new-emp-lead" style="width:auto;margin:0;"> Team Lead (can create & send team tasks)</label>
     <div class="btn-row"><button class="secondary" onclick="hideModal('modal-add-employee')">Cancel</button><button onclick="createEmployee()">Add Employee</button></div>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div id="modal-profile" class="modal-bg hidden">
+  <div class="modal">
+    <h3>My Profile</h3>
+    <div id="pf-error" class="alert alert-error hidden"></div>
+    <div class="profile-row">
+      <div class="avatar avatar-lg" id="pf-avatar"><span id="pf-initials">—</span></div>
+      <div>
+        <input type="file" id="pf-file" accept="image/*" style="display:none;" onchange="pickAvatar(event)">
+        <button class="secondary" onclick="document.getElementById('pf-file').click()" style="width:auto;padding:8px 14px;margin:0 0 6px;">Choose Photo</button>
+        <button class="secondary" onclick="removeAvatar()" style="width:auto;padding:8px 14px;margin:0;font-size:12px;">Remove</button>
+        <p style="font-size:11px;color:var(--muted);margin-top:6px;">Max ~150KB. Will be resized automatically.</p>
+      </div>
+    </div>
+    <label>Full Name</label><input id="pf-name" type="text">
+    <label>Username</label><input id="pf-username" type="text" disabled style="opacity:.6;">
+    <label>Job Title</label><input id="pf-title" type="text" disabled style="opacity:.6;">
+    <label>Team</label><input id="pf-team" type="text" disabled style="opacity:.6;">
+    <div class="btn-row"><button class="secondary" onclick="hideModal('modal-profile')">Close</button><button onclick="saveProfile()">Save</button></div>
+  </div>
+</div>
+
+<!-- Schedule Cell Editor Modal -->
+<div id="modal-sched-cell" class="modal-bg hidden">
+  <div class="modal" style="max-width:400px;">
+    <h3 id="sc-title">Set Shift</h3>
+    <p id="sc-sub" style="color:var(--muted);font-size:13px;margin-bottom:16px;"></p>
+    <label>Shift</label>
+    <div class="hours-selector" style="margin-bottom:16px;">
+      <button type="button" class="hours-btn" onclick="scPick('Morning',event)">Morning</button>
+      <button type="button" class="hours-btn" onclick="scPick('Mid',event)">Mid</button>
+      <button type="button" class="hours-btn" onclick="scPick('Night',event)">Night</button>
+      <button type="button" class="hours-btn" onclick="scPick('Off',event)">Off</button>
+      <button type="button" class="hours-btn" onclick="scPick('',event)">Clear</button>
+    </div>
+    <label>Note (optional)</label>
+    <textarea id="sc-note" rows="2" placeholder="e.g. half day, remote, covering for X"></textarea>
+    <div class="btn-row"><button class="secondary" onclick="hideModal('modal-sched-cell')">Cancel</button><button onclick="saveCell()">Save</button></div>
   </div>
 </div>
 
@@ -436,19 +566,21 @@ async function loadEmpAttendance(){
 
 function switchEmpTab(tab,ev){
   document.querySelectorAll('#employee-page .tab').forEach(t=>t.classList.remove('active')); ev.target.classList.add('active');
-  ['home','board','chat'].forEach(t=>document.getElementById('emp-tab-'+t).classList.add('hidden'));
+  ['home','board','schedule','chat'].forEach(t=>document.getElementById('emp-tab-'+t).classList.add('hidden'));
   document.getElementById('emp-tab-'+tab).classList.remove('hidden');
   if(chatInterval){clearInterval(chatInterval);chatInterval=null;}
   if(tab==='board'){loadBoard('e');setupLeadForm();}
+  if(tab==='schedule')loadSchedule('e');
   if(tab==='chat'){loadChat('emp');chatInterval=setInterval(()=>loadChat('emp'),4000);}
 }
 function switchAdminTab(tab,ev){
   document.querySelectorAll('#admin-page .tab').forEach(t=>t.classList.remove('active')); ev.target.classList.add('active');
-  ['employees','ptasks','board','chat','reports'].forEach(t=>document.getElementById('admin-tab-'+t).classList.add('hidden'));
+  ['employees','ptasks','board','schedule','chat','reports'].forEach(t=>document.getElementById('admin-tab-'+t).classList.add('hidden'));
   document.getElementById('admin-tab-'+tab).classList.remove('hidden');
   if(chatInterval){clearInterval(chatInterval);chatInterval=null;}
   if(tab==='employees'||tab==='ptasks'||tab==='board')loadAdminEmployees();
   if(tab==='board')loadBoard('a');
+  if(tab==='schedule')loadSchedule('a');
   if(tab==='chat'){loadChat('admin');chatInterval=setInterval(()=>loadChat('admin'),4000);}
 }
 
@@ -504,6 +636,18 @@ async function addTeamTask(){
   if(r?.error){alert(r.error);return;}
   document.getElementById('tt-title').value='';document.getElementById('tt-desc').value='';loadBoard('a');
 }
+function switchBoardCol(who, col, ev){
+  // toggle the subtab active state within the same board
+  const tabs = ev.target.parentElement.querySelectorAll('.board-subtab');
+  tabs.forEach(t=>t.classList.remove('active'));
+  ev.target.classList.add('active');
+  // show only the selected column
+  ['todo','progress','done'].forEach(c=>{
+    const el = document.querySelector('.bcol-'+who+'.bcol-'+c);
+    if(el){ if(c===col) el.classList.remove('hidden'); else el.classList.add('hidden'); }
+  });
+}
+
 async function loadBoard(who){
   const tasks=await api('/api/team-tasks');if(!tasks)return;
   const pfx=who==='a'?'acol':'ecol',isAdmin=who==='a';
@@ -524,6 +668,13 @@ async function loadBoard(who){
   document.getElementById(pfx+'-todo').innerHTML=cols.todo.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
   document.getElementById(pfx+'-progress').innerHTML=cols.progress.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
   document.getElementById(pfx+'-done').innerHTML=cols.done.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
+  // update subtab counts
+  const root = document.getElementById((isAdmin?'admin':'emp')+'-tab-board');
+  if(root){
+    const map={todo:cols.todo.length, progress:cols.progress.length, done:cols.done.length};
+    const labels={todo:'Open', progress:'In Progress', done:'Done'};
+    root.querySelectorAll('.board-subtab').forEach(b=>{ const c=b.dataset.col; b.textContent = labels[c] + ' ('+map[c]+')'; });
+  }
 }
 async function moveTeam(id,status,who){await api('/api/team-tasks/'+id,{method:'PATCH',body:JSON.stringify({status})});loadBoard(who);if(currentOpenTask===id)openTeamTask(id,who);}
 async function delTeam(id,who){if(!confirm('Delete this task?'))return;await api('/api/team-tasks/'+id,{method:'DELETE'});loadBoard(who);}
@@ -593,6 +744,58 @@ async function sendChat(who){
   inp.value='';await api('/api/chat',{method:'POST',body:JSON.stringify({message:msg})});loadChat(who);
 }
 
+// ===== PROFILE =====
+let pendingAvatar = null;
+function initials(name){ if(!name)return '—'; const p=name.trim().split(/\s+/); return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||name[0].toUpperCase(); }
+function renderAvatar(el, avatar, name){
+  if(avatar){ el.innerHTML='<img src="'+avatar+'" alt="">'; }
+  else { el.innerHTML='<span>'+esc(initials(name))+'</span>'; }
+}
+async function showProfile(){
+  document.getElementById('pf-error').classList.add('hidden');
+  pendingAvatar=null;
+  const p = await api('/api/profile'); if(!p)return;
+  document.getElementById('pf-name').value=p.full_name||'';
+  document.getElementById('pf-username').value=p.username||'';
+  document.getElementById('pf-title').value=p.job_title||'';
+  document.getElementById('pf-team').value=p.team||'';
+  renderAvatar(document.getElementById('pf-avatar'), p.avatar, p.full_name);
+  document.getElementById('modal-profile').classList.remove('hidden');
+}
+function pickAvatar(ev){
+  const file=ev.target.files[0]; if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please choose an image file');return;}
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    // Resize via canvas to keep under ~150KB
+    const img=new Image();
+    img.onload=()=>{
+      const max=200;
+      let w=img.width,h=img.height;
+      if(w>h){if(w>max){h=h*max/w;w=max;}} else {if(h>max){w=w*max/h;h=max;}}
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+      pendingAvatar=c.toDataURL('image/jpeg',0.85);
+      document.getElementById('pf-avatar').innerHTML='<img src="'+pendingAvatar+'" alt="">';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function removeAvatar(){ pendingAvatar=''; document.getElementById('pf-avatar').innerHTML='<span>'+esc(initials(document.getElementById('pf-name').value))+'</span>'; }
+async function saveProfile(){
+  const err=document.getElementById('pf-error');err.classList.add('hidden');
+  const body={};
+  if(pendingAvatar!==null) body.avatar=pendingAvatar;
+  const nm=document.getElementById('pf-name').value;
+  if(nm) body.full_name=nm;
+  const r=await api('/api/profile',{method:'PUT',body:JSON.stringify(body)});
+  if(r?.error){err.textContent=r.error;err.classList.remove('hidden');return;}
+  if(body.full_name){ currentUser.full_name=body.full_name; localStorage.setItem('hr_user',JSON.stringify(currentUser)); const en=document.getElementById('emp-name'); if(en)en.textContent=body.full_name; }
+  alert('Profile saved');
+  hideModal('modal-profile');
+}
+
 function showChangePassword(){ document.getElementById('cp-error').classList.add('hidden'); document.getElementById('cp-success').classList.add('hidden'); ['cp-current','cp-new','cp-confirm'].forEach(id=>document.getElementById(id).value=''); document.getElementById('modal-change-password').classList.remove('hidden'); }
 async function changePassword(){
   const cur=document.getElementById('cp-current').value, nw=document.getElementById('cp-new').value, cf=document.getElementById('cp-confirm').value;
@@ -606,6 +809,92 @@ async function changePassword(){
   ok.textContent='Password updated successfully!';ok.classList.remove('hidden');
   ['cp-current','cp-new','cp-confirm'].forEach(id=>document.getElementById(id).value='');
   setTimeout(()=>hideModal('modal-change-password'),1500);
+}
+
+// ===== SCHEDULE =====
+let schedMonth = new Date(); schedMonth.setDate(1);
+let shiftTimes = { Morning:'', Mid:'', Night:'' };
+let scCtx = null; // {user_id, day, shift, note, who}
+const SHIFT_ABBR = { Morning:'AM', Mid:'MID', Night:'PM', Off:'OFF' };
+
+function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function schedPrev(who){ schedMonth.setMonth(schedMonth.getMonth()-1); loadSchedule(who); }
+function schedNext(who){ schedMonth.setMonth(schedMonth.getMonth()+1); loadSchedule(who); }
+
+async function saveShifts(){
+  const M=document.getElementById('shift-morning').value, Mi=document.getElementById('shift-mid').value, N=document.getElementById('shift-night').value;
+  const r=await api('/api/shift-settings',{method:'PUT',body:JSON.stringify({Morning:M,Mid:Mi,Night:N})});
+  if(r?.error){alert(r.error);return;}
+  alert('Shift times saved'); loadSchedule('a');
+}
+
+async function loadSchedule(who){
+  const isAdmin = who==='a';
+  // shift times
+  const st = await api('/api/shift-settings'); if(st) shiftTimes = st;
+  if(isAdmin){
+    document.getElementById('shift-morning').value=shiftTimes.Morning||'';
+    document.getElementById('shift-mid').value=shiftTimes.Mid||'';
+    document.getElementById('shift-night').value=shiftTimes.Night||'';
+  } else {
+    const em=document.getElementById('el-morning'); if(em)em.textContent=shiftTimes.Morning?'('+shiftTimes.Morning+')':'';
+    const ed=document.getElementById('el-mid'); if(ed)ed.textContent=shiftTimes.Mid?'('+shiftTimes.Mid+')':'';
+    const en=document.getElementById('el-night'); if(en)en.textContent=shiftTimes.Night?'('+shiftTimes.Night+')':'';
+  }
+  const mk = monthKey(schedMonth);
+  document.getElementById((isAdmin?'asched':'esched')+'-month').textContent = schedMonth.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  // employees list
+  const emps = isAdmin ? await api('/api/admin/employees') : await api('/api/teammates');
+  if(!emps) return;
+  const data = await api('/api/schedule?month='+mk); if(!data)return;
+  const map = {}; data.forEach(r=>{ map[r.user_id+'_'+r.day]={shift:r.shift,note:r.note}; });
+  const year=schedMonth.getFullYear(), month=schedMonth.getMonth();
+  const days=new Date(year,month+1,0).getDate();
+  let html='<thead><tr><th class="sched-name">Employee</th>';
+  for(let d=1;d<=days;d++){
+    const dt=new Date(year,month,d); const wd=dt.toLocaleDateString('en-US',{weekday:'short'}).slice(0,2);
+    const we=(dt.getDay()===5||dt.getDay()===6)?' sched-weekend':'';
+    html+=`<th class="${we}">${d}<br><span style="font-weight:400;font-size:9px;">${wd}</span></th>`;
+  }
+  html+='</tr></thead><tbody>';
+  emps.forEach(e=>{
+    html+=`<tr><td class="sched-name">${esc(e.full_name)}${e.team?`<br><span style="font-size:10px;color:var(--muted);font-weight:400;">${esc(e.team)}</span>`:''}</td>`;
+    for(let d=1;d<=days;d++){
+      const day=mk+'-'+String(d).padStart(2,'0');
+      const cell=map[e.id+'_'+day]; const sh=cell?cell.shift:''; const note=cell?cell.note:'';
+      const cls='sh-'+(sh||'empty')+(note?' sched-has-note':'');
+      const lbl=sh?SHIFT_ABBR[sh]||sh:'';
+      const click=isAdmin?`onclick="openCell(${e.id},'${day}','${sh}',this,'${who}')"`:'';
+      const title=note?`title="${esc(note)}"`:'';
+      html+=`<td class="sched-cell ${cls}" ${click} ${title}>${lbl}</td>`;
+    }
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  document.getElementById((isAdmin?'asched':'esched')+'-table').innerHTML=html;
+}
+
+function openCell(user_id, day, shift, el, who){
+  scCtx={user_id, day, shift, who};
+  const note = el.getAttribute('title')||'';
+  document.getElementById('sc-title').textContent='Set Shift';
+  document.getElementById('sc-sub').textContent=new Date(day+'T00:00').toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('sc-note').value=note;
+  document.querySelectorAll('#modal-sched-cell .hours-btn').forEach(b=>b.classList.remove('active'));
+  scCtx.shift=shift||'';
+  document.getElementById('modal-sched-cell').classList.remove('hidden');
+}
+function scPick(shift,ev){
+  scCtx.shift=shift;
+  document.querySelectorAll('#modal-sched-cell .hours-btn').forEach(b=>b.classList.remove('active'));
+  ev.target.classList.add('active');
+}
+async function saveCell(){
+  if(!scCtx)return;
+  const note=document.getElementById('sc-note').value;
+  const r=await api('/api/schedule',{method:'PUT',body:JSON.stringify({user_id:scCtx.user_id,day:scCtx.day,shift:scCtx.shift,note})});
+  if(r?.error){alert(r.error);return;}
+  hideModal('modal-sched-cell'); loadSchedule(scCtx.who);
 }
 
 function esc(s){if(!s)return'';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}
