@@ -35,6 +35,18 @@
   .user-info button { width: auto; padding: 9px 16px; margin: 0; font-size: 13px; }
   .live-clock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .logo-mark { width: 52px; height: 52px; min-width: 52px; border: 1.5px solid var(--gold-soft); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: Georgia, 'Times New Roman', serif; font-size: 21px; color: var(--gold-soft); letter-spacing: 1px; }
+  .logo-text .lt-main { font-family: Georgia, 'Times New Roman', serif; font-size: 21px; color: var(--gold-soft); letter-spacing: 2px; line-height: 1.1; }
+  .logo-text .lt-sub { font-size: 10px; color: var(--muted); letter-spacing: 3px; margin-top: 3px; }
+  .logo-login { flex-direction: column; gap: 14px; margin-bottom: 24px; }
+  .logo-login .logo-mark { width: 64px; height: 64px; min-width: 64px; font-size: 26px; }
+  .logo-login .logo-text { text-align: center; }
+  .logo-login .lt-main { font-size: 24px; }
+  .logo-sm .logo-mark { width: 44px; height: 44px; min-width: 44px; font-size: 18px; }
+  .logo-sm .lt-main { font-size: 18px; }
+  .logo-sm .lt-sub { font-size: 9px; }
+
   .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; }
   .status-online { background: rgba(95,184,120,.15); color: var(--green); }
   .status-offline { background: rgba(138,134,120,.15); color: var(--muted); }
@@ -125,8 +137,10 @@
 <!-- LOGIN -->
 <div id="login-page">
   <div class="login-box">
-    <h1>SOUT NETWORK</h1>
-    <p>HR Management System</p>
+    <div class="logo logo-login">
+      <div class="logo-mark">HR</div>
+      <div class="logo-text"><div class="lt-main">Sout Network</div><div class="lt-sub">HR MANAGEMENT SYSTEM</div></div>
+    </div>
     <div id="login-error" class="alert alert-error hidden"></div>
     <label>Username</label><input id="login-username" type="text" placeholder="e.g. ahmed">
     <label>Password</label><input id="login-password" type="password" placeholder="••••••••">
@@ -138,7 +152,7 @@
 <div id="employee-page" class="hidden">
   <div class="container">
     <div class="header">
-      <div><h2>Dashboard</h2><p class="subtitle">Welcome <span id="emp-name">—</span></p></div>
+      <div class="logo logo-sm"><div class="logo-mark">HR</div><div class="logo-text"><div class="lt-main">Sout Network</div><div class="lt-sub">Welcome <span id="emp-name">—</span></div></div></div>
       <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
@@ -191,7 +205,7 @@
 <div id="admin-page" class="hidden">
   <div class="container">
     <div class="header">
-      <div><h2>Admin Dashboard</h2><p class="subtitle">Sout Network</p></div>
+      <div class="logo logo-sm"><div class="logo-mark">HR</div><div class="logo-text"><div class="lt-main">Sout Network</div><div class="lt-sub">ADMIN DASHBOARD</div></div></div>
       <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
