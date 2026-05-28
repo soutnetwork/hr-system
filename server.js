@@ -91,6 +91,19 @@ app.post('/api/login', (req, res) => {
   res.json({ token, user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, job_title: user.job_title, daily_hours: user.daily_hours } });
 });
 
+// ===== CHANGE PASSWORD (any logged-in user) =====
+app.post('/api/change-password', authenticate, (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) return res.status(400).json({ error: 'All fields required' });
+  if (new_password.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  const user = get('SELECT * FROM users WHERE id=?', [req.user.id]);
+  if (!user || !bcrypt.compareSync(current_password, user.password_hash))
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  const hash = bcrypt.hashSync(new_password, 10);
+  run('UPDATE users SET password_hash=? WHERE id=?', [hash, req.user.id]);
+  res.json({ success: true });
+});
+
 // ===== ATTENDANCE (flexible, no fixed shift) =====
 app.post('/api/clock-in', authenticate, (req, res) => {
   if (get(`SELECT id FROM attendance WHERE user_id=? AND clock_out IS NULL`, [req.user.id]))

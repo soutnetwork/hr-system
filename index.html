@@ -139,7 +139,7 @@
   <div class="container">
     <div class="header">
       <div><h2>Dashboard</h2><p class="subtitle">Welcome <span id="emp-name">—</span></p></div>
-      <div class="user-info"><span class="live-clock" id="live-clock"></span><button class="secondary" onclick="logout()">Sign Out</button></div>
+      <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
       <button class="tab active" onclick="switchEmpTab('home',event)">My Day</button>
@@ -192,7 +192,7 @@
   <div class="container">
     <div class="header">
       <div><h2>Admin Dashboard</h2><p class="subtitle">Sout Network</p></div>
-      <div class="user-info"><span class="live-clock" id="admin-clock"></span><button class="secondary" onclick="logout()">Sign Out</button></div>
+      <div class="user-info"><button class="secondary" onclick="showChangePassword()">Change Password</button><button class="secondary" onclick="logout()">Sign Out</button></div>
     </div>
     <div class="tabs">
       <button class="tab active" onclick="switchAdminTab('employees',event)">Employees</button>
@@ -289,6 +289,19 @@
   </div>
 </div>
 
+<!-- Change Password Modal -->
+<div id="modal-change-password" class="modal-bg hidden">
+  <div class="modal">
+    <h3>Change Password</h3>
+    <div id="cp-error" class="alert alert-error hidden"></div>
+    <div id="cp-success" class="alert hidden" style="background:rgba(95,184,120,.15);color:var(--green);border:1px solid rgba(95,184,120,.3);"></div>
+    <label>Current Password</label><input id="cp-current" type="password">
+    <label>New Password</label><input id="cp-new" type="password" placeholder="at least 6 characters">
+    <label>Confirm New Password</label><input id="cp-confirm" type="password">
+    <div class="btn-row"><button class="secondary" onclick="hideModal('modal-change-password')">Cancel</button><button onclick="changePassword()">Update Password</button></div>
+  </div>
+</div>
+
 <script>
 const API='';
 let currentUser=null, token=localStorage.getItem('hr_token');
@@ -296,7 +309,6 @@ let selectedHours=8, timerInterval=null, currentSession=null, chatInterval=null;
 
 function selectHours(h,ev){ selectedHours=h; document.querySelectorAll('.hours-btn').forEach(b=>b.classList.remove('active')); ev.target.classList.add('active'); }
 
-setInterval(()=>{ const n=new Date(); const t=n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); const d=n.toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'}); ['live-clock','admin-clock'].forEach(id=>{const e=document.getElementById(id); if(e)e.textContent=d+' — '+t;}); },1000);
 
 async function api(path,opt={}){ const r=await fetch(API+path,{...opt,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...opt.headers}}); if(r.status===401){logout();return null;} return r.json(); }
 
@@ -457,6 +469,21 @@ async function loadChat(who){
 async function sendChat(who){
   const inp=document.getElementById(who+'-chat-input');const msg=inp.value.trim();if(!msg)return;
   inp.value='';await api('/api/chat',{method:'POST',body:JSON.stringify({message:msg})});loadChat(who);
+}
+
+function showChangePassword(){ document.getElementById('cp-error').classList.add('hidden'); document.getElementById('cp-success').classList.add('hidden'); ['cp-current','cp-new','cp-confirm'].forEach(id=>document.getElementById(id).value=''); document.getElementById('modal-change-password').classList.remove('hidden'); }
+async function changePassword(){
+  const cur=document.getElementById('cp-current').value, nw=document.getElementById('cp-new').value, cf=document.getElementById('cp-confirm').value;
+  const err=document.getElementById('cp-error'), ok=document.getElementById('cp-success');
+  err.classList.add('hidden'); ok.classList.add('hidden');
+  if(!cur||!nw||!cf){err.textContent='Please fill all fields';err.classList.remove('hidden');return;}
+  if(nw!==cf){err.textContent='New passwords do not match';err.classList.remove('hidden');return;}
+  if(nw.length<6){err.textContent='New password must be at least 6 characters';err.classList.remove('hidden');return;}
+  const r=await api('/api/change-password',{method:'POST',body:JSON.stringify({current_password:cur,new_password:nw})});
+  if(r?.error){err.textContent=r.error;err.classList.remove('hidden');return;}
+  ok.textContent='Password updated successfully!';ok.classList.remove('hidden');
+  ['cp-current','cp-new','cp-confirm'].forEach(id=>document.getElementById(id).value='');
+  setTimeout(()=>hideModal('modal-change-password'),1500);
 }
 
 function esc(s){if(!s)return'';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}
