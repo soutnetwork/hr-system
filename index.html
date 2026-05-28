@@ -182,6 +182,23 @@
     </div>
 
     <div id="emp-tab-board" class="hidden">
+      <div class="card hidden" id="emp-lead-create">
+        <h3>Create Team Task <span style="font-size:11px;color:var(--muted);">(Team Lead)</span></h3>
+        <label>Title</label><input id="ett-title" type="text" placeholder="e.g. Review new submissions">
+        <label>Description (links allowed)</label><textarea id="ett-desc" rows="2"></textarea>
+        <label>Assign To</label><select id="ett-assignee"></select>
+        <label>Send to Team</label>
+        <select id="ett-team">
+          <option value="">All teams</option>
+          <option value="Copyright">Copyright</option>
+          <option value="Distribution">Distribution</option>
+          <option value="Account Managers">Account Managers</option>
+          <option value="Marketing">Marketing</option>
+        </select>
+        <label>Priority</label>
+        <select id="ett-priority"><option value="high">High</option><option value="normal" selected>Normal</option><option value="low">Low</option></select>
+        <button onclick="addTeamTaskLead()">Add to Board</button>
+      </div>
       <div class="card">
         <h3>Team Board</h3>
         <div class="board-cols">
@@ -229,7 +246,7 @@
           <h3 style="margin:0;">Employees</h3>
           <button style="width:auto;padding:10px 16px;margin:0;" onclick="showAddEmployee()">+ Add Employee</button>
         </div>
-        <div style="overflow-x:auto;"><table><thead><tr><th>Name</th><th>Title</th><th>Status</th><th>Clock In</th><th>Hours Today</th><th>Target</th><th>Tasks</th><th></th></tr></thead><tbody id="admin-employees-table"></tbody></table></div>
+        <div style="overflow-x:auto;"><table><thead><tr><th>Name</th><th>Team</th><th>Title</th><th>Status</th><th>Clock In</th><th>Hours Today</th><th>Target</th><th>Tasks</th><th></th></tr></thead><tbody id="admin-employees-table"></tbody></table></div>
       </div>
     </div>
 
@@ -250,6 +267,14 @@
         <label>Title</label><input id="tt-title" type="text" placeholder="e.g. Prepare monthly distribution report">
         <label>Description</label><textarea id="tt-desc" rows="2"></textarea>
         <label>Assign To</label><select id="tt-assignee"></select>
+        <label>Send to Team</label>
+        <select id="tt-team">
+          <option value="">All teams</option>
+          <option value="Copyright">Copyright</option>
+          <option value="Distribution">Distribution</option>
+          <option value="Account Managers">Account Managers</option>
+          <option value="Marketing">Marketing</option>
+        </select>
         <label>Priority</label>
         <select id="tt-priority"><option value="high">High</option><option value="normal" selected>Normal</option><option value="low">Low</option></select>
         <button onclick="addTeamTask()">Add to Board</button>
@@ -300,7 +325,32 @@
       <button type="button" class="hours-btn" onclick="selectHours(10,event)">10h</button>
       <button type="button" class="hours-btn" onclick="selectHours(12,event)">12h</button>
     </div>
+    <label>Team</label>
+    <select id="new-emp-team">
+      <option value="">No team</option>
+      <option value="Copyright">Copyright</option>
+      <option value="Distribution">Distribution</option>
+      <option value="Account Managers">Account Managers</option>
+      <option value="Marketing">Marketing</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="new-emp-lead" style="width:auto;margin:0;"> Team Lead (can create & send team tasks)</label>
     <div class="btn-row"><button class="secondary" onclick="hideModal('modal-add-employee')">Cancel</button><button onclick="createEmployee()">Add Employee</button></div>
+  </div>
+</div>
+
+<!-- Task Detail Modal (opens from inside) -->
+<div id="modal-task-detail" class="modal-bg hidden">
+  <div class="modal" style="max-width:560px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
+      <h3 id="td-title" style="margin:0;flex:1;">Task</h3>
+      <button class="secondary" style="width:auto;padding:6px 12px;margin:0;" onclick="closeTaskDetail()">Close</button>
+    </div>
+    <div id="td-meta" style="margin-bottom:14px;"></div>
+    <div id="td-desc" style="font-size:14px;color:var(--text);line-height:1.6;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;"></div>
+    <div id="td-actions" class="btn-row" style="margin-bottom:18px;"></div>
+    <h3 style="font-size:14px;">Replies</h3>
+    <div id="td-comments" style="max-height:220px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div class="chat-input-row"><input id="td-comment-input" type="text" placeholder="Write a reply..." onkeydown="if(event.key==='Enter')sendComment()"><button onclick="sendComment()">Reply</button></div>
   </div>
 </div>
 
@@ -389,7 +439,7 @@ function switchEmpTab(tab,ev){
   ['home','board','chat'].forEach(t=>document.getElementById('emp-tab-'+t).classList.add('hidden'));
   document.getElementById('emp-tab-'+tab).classList.remove('hidden');
   if(chatInterval){clearInterval(chatInterval);chatInterval=null;}
-  if(tab==='board')loadBoard('e');
+  if(tab==='board'){loadBoard('e');setupLeadForm();}
   if(tab==='chat'){loadChat('emp');chatInterval=setInterval(()=>loadChat('emp'),4000);}
 }
 function switchAdminTab(tab,ev){
@@ -409,17 +459,18 @@ async function loadAdminEmployees(){
   document.getElementById('stat-offline').textContent=emps.filter(e=>!e.is_online).length;
   document.getElementById('stat-tasks').textContent=emps.reduce((a,e)=>a+(e.tasks_done_today||0),0);
   const tb=document.getElementById('admin-employees-table');
-  tb.innerHTML=emps.map(e=>{const s=e.is_online?'online':'offline',st=e.is_online?'Online':'Offline',t=e.clock_in?new Date(e.clock_in+'Z').toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—';let ht='—';if(e.is_online&&e.clock_in){ht=((Date.now()-new Date(e.clock_in+'Z').getTime())/3600000).toFixed(1)+'h';}return `<tr><td style="font-weight:600;">${esc(e.full_name)}</td><td style="color:var(--muted);">${esc(e.job_title||'—')}</td><td><span class="status-badge status-${s}"><span class="dot dot-${s}"></span>${st}</span></td><td>${t}</td><td>${ht}</td><td>${e.daily_hours||8}h</td><td>${e.tasks_done_today}</td><td><button class="danger" style="padding:6px 12px;font-size:12px;width:auto;margin:0;" onclick="deleteEmployee(${e.id},'${esc(e.full_name)}')">Delete</button></td></tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;color:#66635a;padding:20px;">No employees yet</td></tr>';
+  tb.innerHTML=emps.map(e=>{const s=e.is_online?'online':'offline',st=e.is_online?'Online':'Offline',t=e.clock_in?new Date(e.clock_in+'Z').toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—';let ht='—';if(e.is_online&&e.clock_in){ht=((Date.now()-new Date(e.clock_in+'Z').getTime())/3600000).toFixed(1)+'h';}const teamCell=e.team?`${esc(e.team)}${e.is_lead?' <span class="pri pri-normal">LEAD</span>':''}`:'<span style="color:var(--muted);">—</span>';return `<tr><td style="font-weight:600;">${esc(e.full_name)}</td><td style="font-size:12px;">${teamCell}</td><td style="color:var(--muted);">${esc(e.job_title||'—')}</td><td><span class="status-badge status-${s}"><span class="dot dot-${s}"></span>${st}</span></td><td>${t}</td><td>${ht}</td><td>${e.daily_hours||8}h</td><td>${e.tasks_done_today}</td><td><button class="danger" style="padding:6px 12px;font-size:12px;width:auto;margin:0;" onclick="deleteEmployee(${e.id},'${esc(e.full_name)}')">Delete</button></td></tr>`;}).join('')||'<tr><td colspan="9" style="text-align:center;color:#66635a;padding:20px;">No employees yet</td></tr>';
   ['task-user-select','task-view-select','report-user-select','tt-assignee'].forEach(id=>{const sel=document.getElementById(id);if(sel){const ph=id==='tt-assignee'?'Unassigned':'Select employee...';sel.innerHTML=`<option value="">${ph}</option>`+emps.map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');}});
 }
 function showAddEmployee(){document.getElementById('modal-add-employee').classList.remove('hidden');}
 function hideModal(id){document.getElementById(id).classList.add('hidden');}
 async function createEmployee(){
-  const fn=document.getElementById('new-emp-name').value,un=document.getElementById('new-emp-username').value,pw=document.getElementById('new-emp-password').value,jt=document.getElementById('new-emp-title').value,e=document.getElementById('add-emp-error');
+  const fn=document.getElementById('new-emp-name').value,un=document.getElementById('new-emp-username').value,pw=document.getElementById('new-emp-password').value,jt=document.getElementById('new-emp-title').value,tm=document.getElementById('new-emp-team').value,ld=document.getElementById('new-emp-lead').checked,e=document.getElementById('add-emp-error');
   if(!fn||!un||!pw){e.textContent='Name, username and password are required';e.classList.remove('hidden');return;}
-  const r=await api('/api/admin/employees',{method:'POST',body:JSON.stringify({full_name:fn,username:un,password:pw,job_title:jt,daily_hours:selectedHours})});
+  const r=await api('/api/admin/employees',{method:'POST',body:JSON.stringify({full_name:fn,username:un,password:pw,job_title:jt,daily_hours:selectedHours,team:tm,is_lead:ld})});
   if(r?.error){e.textContent=r.error;e.classList.remove('hidden');return;}
   ['new-emp-name','new-emp-username','new-emp-password','new-emp-title'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('new-emp-team').value='';document.getElementById('new-emp-lead').checked=false;
   e.classList.add('hidden');hideModal('modal-add-employee');loadAdminEmployees();
 }
 async function deleteEmployee(id,name){if(!confirm('Delete '+name+'?'))return;await api('/api/admin/employees/'+id,{method:'DELETE'});loadAdminEmployees();}
@@ -447,9 +498,9 @@ async function loadReport(){
 
 // ===== TEAM BOARD =====
 async function addTeamTask(){
-  const t=document.getElementById('tt-title').value,d=document.getElementById('tt-desc').value,a=document.getElementById('tt-assignee').value,p=document.getElementById('tt-priority').value;
+  const t=document.getElementById('tt-title').value,d=document.getElementById('tt-desc').value,a=document.getElementById('tt-assignee').value,p=document.getElementById('tt-priority').value,tm=document.getElementById('tt-team').value;
   if(!t){alert('Title required');return;}
-  const r=await api('/api/team-tasks',{method:'POST',body:JSON.stringify({title:t,description:d,assignee_id:a||null,priority:p})});
+  const r=await api('/api/team-tasks',{method:'POST',body:JSON.stringify({title:t,description:d,assignee_id:a||null,priority:p,team:tm})});
   if(r?.error){alert(r.error);return;}
   document.getElementById('tt-title').value='';document.getElementById('tt-desc').value='';loadBoard('a');
 }
@@ -460,19 +511,75 @@ async function loadBoard(who){
   tasks.forEach(t=>{const k=t.status==='in_progress'?'progress':t.status==='done'?'done':'todo';cols[k].push(t);});
   const render=(t)=>{
     const pri=`<span class="pri pri-${t.priority||'normal'}">${(t.priority||'normal').toUpperCase()}</span>`;
+    const teamTag=t.team?`<span class="pri pri-normal" style="margin-left:5px;">${esc(t.team)}</span>`:'';
     let actions='';
+    actions+=`<button class="secondary" onclick="openTeamTask(${t.id},'${who}')">Open${t.comment_count?` (${t.comment_count})`:''}</button>`;
     if(t.status!=='in_progress'&&t.status!=='done')actions+=`<button onclick="moveTeam(${t.id},'in_progress','${who}')">Start</button>`;
     if(t.status==='in_progress')actions+=`<button class="success" onclick="moveTeam(${t.id},'done','${who}')">Done</button>`;
     if(t.status==='done')actions+=`<button class="secondary" onclick="moveTeam(${t.id},'todo','${who}')">Reopen</button>`;
+    if(!t.assignee_name)actions+=`<button class="secondary" onclick="claimTeam(${t.id},'${who}')">Take it</button>`;
     if(isAdmin)actions+=`<button class="danger" onclick="delTeam(${t.id},'${who}')">Del</button>`;
-    return `<div class="board-card">${pri}<div class="bt" style="margin-top:6px;">${esc(t.title)}</div>${t.description?`<div class="bd">${esc(t.description)}</div>`:''}${t.assignee_name?`<div class="ba">@ ${esc(t.assignee_name)}</div>`:''}<div class="board-card-actions">${actions}</div></div>`;
+    return `<div class="board-card">${pri}${teamTag}<div class="bt" style="margin-top:6px;">${esc(t.title)}</div>${t.description?`<div class="bd">${esc(t.description).slice(0,80)}${t.description.length>80?'…':''}</div>`:''}${t.assignee_name?`<div class="ba">@ ${esc(t.assignee_name)}</div>`:'<div class="ba" style="color:var(--muted);">Unassigned</div>'}<div class="board-card-actions">${actions}</div></div>`;
   };
   document.getElementById(pfx+'-todo').innerHTML=cols.todo.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
   document.getElementById(pfx+'-progress').innerHTML=cols.progress.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
   document.getElementById(pfx+'-done').innerHTML=cols.done.map(render).join('')||'<p style="color:#66635a;font-size:12px;">Empty</p>';
 }
-async function moveTeam(id,status,who){await api('/api/team-tasks/'+id,{method:'PATCH',body:JSON.stringify({status})});loadBoard(who);}
+async function moveTeam(id,status,who){await api('/api/team-tasks/'+id,{method:'PATCH',body:JSON.stringify({status})});loadBoard(who);if(currentOpenTask===id)openTeamTask(id,who);}
 async function delTeam(id,who){if(!confirm('Delete this task?'))return;await api('/api/team-tasks/'+id,{method:'DELETE'});loadBoard(who);}
+async function claimTeam(id,who){await api('/api/team-tasks/'+id+'/claim',{method:'POST'});loadBoard(who);if(currentOpenTask===id)openTeamTask(id,who);}
+
+// ===== TASK DETAIL (open from inside, with links + comments) =====
+let currentOpenTask=null, currentOpenWho='a';
+async function setupLeadForm(){
+  const card=document.getElementById('emp-lead-create');
+  if(currentUser.is_lead){
+    card.classList.remove('hidden');
+    const mates=await api('/api/teammates');
+    if(mates){const sel=document.getElementById('ett-assignee');sel.innerHTML='<option value="">Unassigned</option>'+mates.map(m=>`<option value="${m.id}">${esc(m.full_name)}${m.team?' ('+esc(m.team)+')':''}</option>`).join('');}
+  } else { card.classList.add('hidden'); }
+}
+async function addTeamTaskLead(){
+  const t=document.getElementById('ett-title').value,d=document.getElementById('ett-desc').value,a=document.getElementById('ett-assignee').value,tm=document.getElementById('ett-team').value,p=document.getElementById('ett-priority').value;
+  if(!t){alert('Title required');return;}
+  const r=await api('/api/team-tasks',{method:'POST',body:JSON.stringify({title:t,description:d,assignee_id:a||null,team:tm,priority:p})});
+  if(r?.error){alert(r.error);return;}
+  document.getElementById('ett-title').value='';document.getElementById('ett-desc').value='';alert('Task added to board');loadBoard('e');
+}
+function linkify(text){
+  const escaped=esc(text);
+  return escaped.replace(/(https?:\/\/[^\s]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:#9bb3e0;text-decoration:underline;word-break:break-all;">$1</a>').replace(/\n/g,'<br>');
+}
+async function openTeamTask(id,who){
+  currentOpenTask=id; currentOpenWho=who;
+  const tasks=await api('/api/team-tasks'); if(!tasks)return;
+  const t=tasks.find(x=>x.id===id); if(!t)return;
+  const statusLabel=t.status==='in_progress'?'In Progress':t.status==='done'?'Done':'To Do';
+  document.getElementById('td-title').textContent=t.title;
+  document.getElementById('td-meta').innerHTML=`<span class="pri pri-${t.priority||'normal'}">${(t.priority||'normal').toUpperCase()}</span>${t.team?`<span class="pri pri-normal" style="margin-left:6px;">${esc(t.team)}</span>`:''} <span style="margin-left:6px;color:var(--muted);font-size:12px;">${statusLabel}</span> ${t.assignee_name?`<span style="margin-left:6px;color:var(--gold-soft);font-size:12px;">@ ${esc(t.assignee_name)}</span>`:'<span style="margin-left:6px;color:var(--muted);font-size:12px;">Unassigned</span>'}`;
+  document.getElementById('td-desc').innerHTML=t.description?linkify(t.description):'<span style="color:var(--muted);">No description</span>';
+  // action buttons inside modal
+  let acts='';
+  if(t.status!=='in_progress'&&t.status!=='done')acts+=`<button onclick="moveTeam(${t.id},'in_progress','${who}')">Start</button>`;
+  if(t.status==='in_progress')acts+=`<button class="success" onclick="moveTeam(${t.id},'done','${who}')">Mark Done</button>`;
+  if(t.status==='done')acts+=`<button class="secondary" onclick="moveTeam(${t.id},'todo','${who}')">Reopen</button>`;
+  if(!t.assignee_name)acts+=`<button class="secondary" onclick="claimTeam(${t.id},'${who}')">Take it</button>`;
+  document.getElementById('td-actions').innerHTML=acts;
+  document.getElementById('modal-task-detail').classList.remove('hidden');
+  loadComments(id);
+}
+async function loadComments(id){
+  const c=await api('/api/team-tasks/'+id+'/comments'); if(!c)return;
+  const box=document.getElementById('td-comments');
+  box.innerHTML=c.map(m=>{const tm=new Date(m.created_at+'Z').toLocaleString('en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});return `<div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--gold-soft);margin-bottom:2px;">${esc(m.full_name)} <span style="color:var(--muted);">· ${tm}</span></div><div style="font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;">${linkify(m.comment)}</div></div>`;}).join('')||'<p style="color:var(--muted);font-size:12px;">No replies yet. Be the first.</p>';
+  box.scrollTop=box.scrollHeight;
+}
+async function sendComment(){
+  const inp=document.getElementById('td-comment-input');const v=inp.value.trim();if(!v||!currentOpenTask)return;
+  inp.value='';await api('/api/team-tasks/'+currentOpenTask+'/comments',{method:'POST',body:JSON.stringify({comment:v})});
+  loadComments(currentOpenTask); loadBoard(currentOpenWho);
+}
+function closeTaskDetail(){currentOpenTask=null;hideModal('modal-task-detail');}
 
 // ===== CHAT =====
 async function loadChat(who){
