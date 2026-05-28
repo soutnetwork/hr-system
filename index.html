@@ -238,7 +238,56 @@ function showDashboard() {
     loadEmpStatus(); loadEmpTasksOwn(); loadEmpAttendance();
     setInterval(loadEmpStatus, 30000);
   }
+}}
+
+let workTimerInterval = null;
+
+function startWorkTimer(clockIn){
+
+  clearInterval(workTimerInterval);
+
+  const TOTAL_MINUTES = 540;
+
+  const start = new Date(clockIn + 'Z');
+
+  workTimerInterval = setInterval(() => {
+
+    const now = new Date();
+
+    const diff = now - start;
+
+    const totalMinutes =
+    Math.floor(diff / 1000 / 60);
+
+    const hours =
+    Math.floor(totalMinutes / 60);
+
+    const minutes =
+    totalMinutes % 60;
+
+    document.getElementById('work-timer').textContent =
+    `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
+
+    document.getElementById('worked-hours').textContent =
+    `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')} of 09:00 Hours`;
+
+    const remaining =
+    Math.max(0, TOTAL_MINUTES - totalMinutes);
+
+    document.getElementById('remaining-time').textContent =
+    `${remaining} minutes remaining`;
+
+    const percent =
+    Math.min(100, (totalMinutes / TOTAL_MINUTES) * 100);
+
+    document.getElementById('progress-bar').style.width =
+    `${percent}%`;
+
+  },1000);
+
 }
+
+async function loadEmpStatus() {
 async function loadEmpStatus() {
   const s = await api('/api/my-status'); if (!s) return;
   const badge = document.getElementById('emp-status-badge');
