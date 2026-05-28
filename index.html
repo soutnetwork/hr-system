@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR System - Sout Network</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #f5f5f7; color: #1a1a1a; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .login-box { max-width: 380px; margin: 80px auto; background: white; padding: 32px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .login-box h1 { font-size: 22px; margin-bottom: 6px; text-align: center; }
+  .login-box p { color: #666; text-align: center; margin-bottom: 24px; font-size: 14px; }
+  input, button, select, textarea { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 12px; outline: none; }
+  input:focus, textarea:focus { border-color: #2563eb; }
+  button { background: #2563eb; color: white; border: none; cursor: pointer; font-weight: 500; }
+  button:hover { background: #1d4ed8; }
+  button.danger { background: #dc2626; } button.danger:hover { background: #b91c1c; }
+  button.success { background: #16a34a; } button.success:hover { background: #15803d; }
+  button.warning { background: #ea580c; } button.warning:hover { background: #c2410c; }
+  button.secondary { background: white; color: #374151; border: 1px solid #ddd; }
+  button.secondary:hover { background: #f5f5f7; }
+  .header { background: white; padding: 16px 24px; border-radius: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .header h2 { font-size: 18px; }
+  .user-info { display: flex; align-items: center; gap: 12px; }
+  .user-info button { width: auto; padding: 8px 14px; margin: 0; font-size: 13px; }
+  .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+  .status-online { background: #dcfce7; color: #15803d; }
+  .status-break { background: #ffedd5; color: #c2410c; }
+  .status-offline { background: #f1f5f9; color: #64748b; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-online { background: #16a34a; } .dot-break { background: #ea580c; } .dot-offline { background: #94a3b8; }
+  .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .card h3 { font-size: 15px; margin-bottom: 14px; color: #374151; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+  @media (max-width: 600px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+  .stat { background: #f9fafb; padding: 14px; border-radius: 8px; }
+  .stat-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 600; }
+  .task-item { padding: 12px 14px; background: #f9fafb; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .task-item.done { opacity: 0.5; }
+  .task-item.in_progress { background: #eff6ff; border-left: 3px solid #2563eb; }
+  .task-content { flex: 1; }
+  .task-title { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+  .task-desc { font-size: 12px; color: #6b7280; }
+  .task-actions { display: flex; gap: 6px; }
+  .task-actions button { width: auto; padding: 5px 10px; margin: 0; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+  th { background: #f9fafb; font-weight: 500; font-size: 12px; color: #6b7280; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; background: white; padding: 6px; border-radius: 10px; }
+  .tab { flex: 1; padding: 10px; text-align: center; background: transparent; color: #6b7280; cursor: pointer; border-radius: 8px; font-weight: 500; font-size: 14px; border: none; }
+  .tab.active { background: #2563eb; color: white; }
+  .hidden { display: none !important; }
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .alert-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row button { margin: 0; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: white; padding: 24px; border-radius: 12px; max-width: 420px; width: 90%; }
+  .modal h3 { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: #374151; margin-bottom: 6px; font-weight: 500; }
+  .live-clock { font-size: 13px; color: #6b7280; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="login-page">
+  <div class="login-box">
+    <h1>HR Management System</h1>
+    <p>Sout Network</p>
+    <div id="login-error" class="alert alert-error hidden"></div>
+    <label>Username</label>
+    <input id="login-username" type="text" placeholder="e.g. ahmed">
+    <label>Password</label>
+    <input id="login-password" type="password" placeholder="••••••••">
+    <button onclick="login()">Sign In</button>
+  </div>
+</div>
+<div id="employee-page" class="hidden">
+  <div class="container">
+    <div class="header">
+      <div><h2 id="emp-name">—</h2><p style="font-size: 13px; color: #6b7280;" id="emp-title">—</p></div>
+      <div class="user-info"><span class="live-clock" id="live-clock"></span><button class="secondary" onclick="logout()">Sign Out</button></div>
+    </div>
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0;">Current Status</h3>
+        <span id="emp-status-badge" class="status-badge status-offline"><span class="dot dot-offline"></span><span id="emp-status-text">Offline</span></span>
+      </div>
+      <p style="font-size: 13px; color: #6b7280; margin-bottom: 14px;" id="emp-session-info">Not clocked in</p>
+      <div class="btn-row">
+        <button class="success" onclick="clockIn()">Clock In</button>
+        <button class="warning" onclick="toggleBreak()">Break</button>
+        <button class="danger" onclick="clockOut()">Clock Out</button>
+      </div>
+    </div>
+    <div class="card"><h3>Today's Tasks</h3><div id="emp-tasks-list"><p style="color: #6b7280; font-size: 13px; text-align: center; padding: 20px;">No tasks assigned</p></div></div>
+    <div class="card"><h3>Attendance History</h3><div style="overflow-x: auto;"><table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th></tr></thead><tbody id="emp-attendance-table"></tbody></table></div></div>
+  </div>
+</div>
+<div id="admin-page" class="hidden">
+  <div class="container">
+    <div class="header">
+      <div><h2>Admin Dashboard</h2><p style="font-size: 13px; color: #6b7280;">Sout Network</p></div>
+      <div class="user-info"><span class="live-clock" id="admin-clock"></span><button class="secondary" onclick="logout()">Sign Out</button></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchAdminTab('employees', event)">Employees</button>
+      <button class="tab" onclick="switchAdminTab('tasks', event)">Tasks</button>
+      <button class="tab" onclick="switchAdminTab('reports', event)">Reports</button>
+    </div>
+    <div id="admin-tab-employees">
+      <div class="grid-4" style="margin-bottom: 16px;">
+        <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">0</div></div>
+        <div class="stat"><div class="stat-label">Online</div><div class="stat-value" id="stat-online" style="color:#16a34a;">0</div></div>
+        <div class="stat"><div class="stat-label">On Break</div><div class="stat-value" id="stat-break" style="color:#ea580c;">0</div></div>
+        <div class="stat"><div class="stat-label">Offline</div><div class="stat-value" id="stat-offline" style="color:#64748b;">0</div></div>
+      </div>
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h3 style="margin: 0;">Employees</h3>
+          <button style="width: auto; padding: 8px 14px; margin: 0;" onclick="showAddEmployee()">+ Add Employee</button>
+        </div>
+        <div style="overflow-x: auto;"><table><thead><tr><th>Name</th><th>Title</th><th>Status</th><th>Clock In</th><th>Tasks Done</th><th></th></tr></thead><tbody id="admin-employees-table"></tbody></table></div>
+      </div>
+    </div>
+    <div id="admin-tab-tasks" class="hidden">
+      <div class="card">
+        <h3>Assign Task</h3>
+        <label>Employee</label><select id="task-user-select"></select>
+        <label>Task Title</label><input id="task-title" type="text" placeholder="e.g. Upload tracks for album X">
+        <label>Description (optional)</label><textarea id="task-desc" rows="3"></textarea>
+        <button onclick="addTask()">Add Task</button>
+      </div>
+      <div class="card"><h3>View Tasks</h3><select id="task-view-select" onchange="loadEmpTasks()"></select><div id="admin-tasks-list" style="margin-top: 12px;"></div></div>
+    </div>
+    <div id="admin-tab-reports" class="hidden">
+      <div class="card">
+        <h3>Attendance Report</h3>
+        <select id="report-user-select" onchange="loadReport()"></select>
+        <div style="overflow-x: auto; margin-top: 12px;"><table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th></tr></thead><tbody id="admin-report-table"></tbody></table></div>
+        <p id="report-total" style="margin-top: 12px; font-size: 14px;"></p>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="modal-add-employee" class="modal-bg hidden">
+  <div class="modal">
+    <h3>Add New Employee</h3>
+    <div id="add-emp-error" class="alert alert-error hidden"></div>
+    <label>Full Name</label><input id="new-emp-name" type="text">
+    <label>Username</label><input id="new-emp-username" type="text" placeholder="lowercase, no spaces">
+    <label>Password</label><input id="new-emp-password" type="text">
+    <label>Job Title</label><input id="new-emp-title" type="text">
+    <div class="btn-row"><button class="secondary" onclick="hideModal('modal-add-employee')">Cancel</button><button onclick="createEmployee()">Add</button></div>
+  </div>
+</div>
+<script>
+const API = '';
+let currentUser = null;
+let token = localStorage.getItem('hr_token');
+setInterval(() => {
+  const now = new Date();
+  const t = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const d = now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+  ['live-clock', 'admin-clock'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = d + ' — ' + t; });
+}, 1000);
+async function api(path, options = {}) {
+  const res = await fetch(API + path, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...options.headers } });
+  if (res.status === 401) { logout(); return null; }
+  return res.json();
+}
+async function login() {
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error');
+  if (!username || !password) { errBox.textContent = 'Please enter username and password'; errBox.classList.remove('hidden'); return; }
+  const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+  const data = await res.json();
+  if (data.error) { errBox.textContent = data.error; errBox.classList.remove('hidden'); return; }
+  token = data.token; currentUser = data.user;
+  localStorage.setItem('hr_token', token); localStorage.setItem('hr_user', JSON.stringify(data.user));
+  showDashboard();
+}
+function logout() {
+  localStorage.removeItem('hr_token'); localStorage.removeItem('hr_user');
+  token = null; currentUser = null;
+  document.getElementById('login-page').classList.remove('hidden');
+  document.getElementById('employee-page').classList.add('hidden');
+  document.getElementById('admin-page').classList.add('hidden');
+}
+function showDashboard() {
+  document.getElementById('login-page').classList.add('hidden');
+  if (currentUser.role === 'admin') {
+    document.getElementById('admin-page').classList.remove('hidden');
+    loadAdminEmployees(); setInterval(loadAdminEmployees, 15000);
+  } else {
+    document.getElementById('employee-page').classList.remove('hidden');
+    document.getElementById('emp-name').textContent = currentUser.full_name;
+    document.getElementById('emp-title').textContent = currentUser.job_title || '';
+    loadEmpStatus(); loadEmpTasksOwn(); loadEmpAttendance();
+    setInterval(loadEmpStatus, 30000);
+  }
+}
+async function loadEmpStatus() {
+  const s = await api('/api/my-status'); if (!s) return;
+  const badge = document.getElementById('emp-status-badge');
+  const text = document.getElementById('emp-status-text');
+  const info = document.getElementById('emp-session-info');
+  badge.className = 'status-badge status-' + (s.online ? s.status : 'offline');
+  const dot = badge.querySelector('.dot');
+  dot.className = 'dot dot-' + (s.online ? s.status : 'offline');
+  if (s.online) {
+    text.textContent = s.status === 'break' ? 'On Break' : 'Online';
+    const t = new Date(s.clock_in + 'Z').toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    info.textContent = 'Clocked in at ' + t;
+  } else { text.textContent = 'Offline'; info.textContent = 'Not clocked in'; }
+}
+async function clockIn() { const r = await api('/api/clock-in', { method: 'POST' }); if (r?.error) alert(r.error); loadEmpStatus(); }
+async function clockOut() { if (!confirm('Confirm clock out?')) return; const r = await api('/api/clock-out', { method: 'POST' }); if (r?.error) alert(r.error); loadEmpStatus(); loadEmpAttendance(); }
+async function toggleBreak() { const r = await api('/api/break', { method: 'POST' }); if (r?.error) alert(r.error); loadEmpStatus(); }
+async function loadEmpTasksOwn() {
+  const tasks = await api('/api/my-tasks'); if (!tasks) return;
+  const list = document.getElementById('emp-tasks-list');
+  if (tasks.length === 0) { list.innerHTML = '<p style="color: #6b7280; font-size: 13px; text-align: center; padding: 20px;">No tasks assigned</p>'; return; }
+  list.innerHTML = tasks.map(t => `<div class="task-item ${t.status}"><div class="task-content"><div class="task-title">${esc(t.title)}</div>${t.description ? `<div class="task-desc">${esc(t.description)}</div>` : ''}</div><div class="task-actions">${t.status === 'pending' ? `<button class="warning" onclick="updateTask(${t.id}, 'in_progress')">Start</button>` : ''}${t.status === 'in_progress' ? `<button class="success" onclick="updateTask(${t.id}, 'done')">Done</button>` : ''}${t.status === 'done' ? `<span style="color: #16a34a; font-size: 12px;">Completed</span>` : ''}</div></div>`).join('');
+}
+async function updateTask(id, status) { await api('/api/tasks/' + id, { method: 'PATCH', body: JSON.stringify({ status }) }); loadEmpTasksOwn(); }
+async function loadEmpAttendance() {
+  const r = await api('/api/my-attendance'); if (!r) return;
+  const tbody = document.getElementById('emp-attendance-table');
+  tbody.innerHTML = r.map(x => { const i = new Date(x.clock_in + 'Z'); const o = x.clock_out ? new Date(x.clock_out + 'Z') : null; return `<tr><td>${i.toLocaleDateString('en-US')}</td><td>${i.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td><td>${o ? o.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</td><td>${x.hours_worked ? x.hours_worked + ' h' : '—'}</td></tr>`; }).join('') || '<tr><td colspan="4" style="text-align:center; color:#6b7280;">No records</td></tr>';
+}
+function switchAdminTab(tab, ev) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  ev.target.classList.add('active');
+  ['employees', 'tasks', 'reports'].forEach(t => document.getElementById('admin-tab-' + t).classList.add('hidden'));
+  document.getElementById('admin-tab-' + tab).classList.remove('hidden');
+  if (tab === 'tasks' || tab === 'reports') loadAdminEmployees();
+}
+async function loadAdminEmployees() {
+  const emps = await api('/api/admin/employees'); if (!emps) return;
+  const online = emps.filter(e => e.is_online && e.status === 'online').length;
+  const onBreak = emps.filter(e => e.is_online && e.status === 'break').length;
+  const offline = emps.filter(e => !e.is_online).length;
+  document.getElementById('stat-total').textContent = emps.length;
+  document.getElementById('stat-online').textContent = online;
+  document.getElementById('stat-break').textContent = onBreak;
+  document.getElementById('stat-offline').textContent = offline;
+  const tbody = document.getElementById('admin-employees-table');
+  tbody.innerHTML = emps.map(e => { const s = e.is_online ? e.status : 'offline'; const st = s === 'online' ? 'Online' : s === 'break' ? 'On Break' : 'Offline'; const t = e.clock_in ? new Date(e.clock_in + 'Z').toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'; return `<tr><td>${esc(e.full_name)}</td><td style="color:#6b7280;">${esc(e.job_title || '—')}</td><td><span class="status-badge status-${s}"><span class="dot dot-${s}"></span>${st}</span></td><td>${t}</td><td>${e.tasks_done_today}</td><td><button class="danger" style="padding:4px 10px; font-size:12px; width:auto; margin:0;" onclick="deleteEmployee(${e.id}, '${esc(e.full_name)}')">Delete</button></td></tr>`; }).join('') || '<tr><td colspan="6" style="text-align:center; color:#6b7280; padding:20px;">No employees yet</td></tr>';
+  ['task-user-select', 'task-view-select', 'report-user-select'].forEach(id => { const sel = document.getElementById(id); if (sel) sel.innerHTML = '<option value="">Select employee...</option>' + emps.map(e => `<option value="${e.id}">${esc(e.full_name)}</option>`).join(''); });
+}
+function showAddEmployee() { document.getElementById('modal-add-employee').classList.remove('hidden'); }
+function hideModal(id) { document.getElementById(id).classList.add('hidden'); }
+async function createEmployee() {
+  const full_name = document.getElementById('new-emp-name').value;
+  const username = document.getElementById('new-emp-username').value;
+  const password = document.getElementById('new-emp-password').value;
+  const job_title = document.getElementById('new-emp-title').value;
+  const errBox = document.getElementById('add-emp-error');
+  if (!full_name || !username || !password) { errBox.textContent = 'All fields are required'; errBox.classList.remove('hidden'); return; }
+  const r = await api('/api/admin/employees', { method: 'POST', body: JSON.stringify({ full_name, username, password, job_title }) });
+  if (r?.error) { errBox.textContent = r.error; errBox.classList.remove('hidden'); return; }
+  ['new-emp-name', 'new-emp-username', 'new-emp-password', 'new-emp-title'].forEach(id => document.getElementById(id).value = '');
+  errBox.classList.add('hidden'); hideModal('modal-add-employee'); loadAdminEmployees();
+}
+async function deleteEmployee(id, name) { if (!confirm('Delete ' + name + '?')) return; await api('/api/admin/employees/' + id, { method: 'DELETE' }); loadAdminEmployees(); }
+async function addTask() {
+  const user_id = document.getElementById('task-user-select').value;
+  const title = document.getElementById('task-title').value;
+  const description = document.getElementById('task-desc').value;
+  if (!user_id || !title) { alert('Please fill required fields'); return; }
+  const r = await api('/api/admin/tasks', { method: 'POST', body: JSON.stringify({ user_id, title, description }) });
+  if (r?.error) { alert(r.error); return; }
+  document.getElementById('task-title').value = ''; document.getElementById('task-desc').value = '';
+  alert('Task added successfully'); if (document.getElementById('task-view-select').value === user_id) loadEmpTasks();
+}
+async function loadEmpTasks() {
+  const user_id = document.getElementById('task-view-select').value;
+  if (!user_id) { document.getElementById('admin-tasks-list').innerHTML = ''; return; }
+  const tasks = await api('/api/admin/tasks/' + user_id); if (!tasks) return;
+  const list = document.getElementById('admin-tasks-list');
+  if (tasks.length === 0) { list.innerHTML = '<p style="color: #6b7280; font-size: 13px; text-align: center; padding: 20px;">No tasks</p>'; return; }
+  list.innerHTML = tasks.map(t => `<div class="task-item ${t.status}"><div class="task-content"><div class="task-title">${esc(t.title)}</div>${t.description ? `<div class="task-desc">${esc(t.description)}</div>` : ''}<div style="font-size:11px; color:#94a3b8; margin-top:4px;">${t.assigned_date} — ${t.status === 'done' ? '<span style="color:#16a34a;">Completed</span>' : t.status === 'in_progress' ? '<span style="color:#2563eb;">In Progress</span>' : '<span>Pending</span>'}</div></div><button class="danger" style="padding:5px 10px; font-size:12px; width:auto; margin:0;" onclick="deleteTask(${t.id})">Delete</button></div>`).join('');
+}
+async function deleteTask(id) { if (!confirm('Delete this task?')) return; await api('/api/admin/tasks/' + id, { method: 'DELETE' }); loadEmpTasks(); }
+async function loadReport() {
+  const user_id = document.getElementById('report-user-select').value; if (!user_id) return;
+  const r = await api('/api/admin/attendance/' + user_id); if (!r) return;
+  const tbody = document.getElementById('admin-report-table'); let total = 0;
+  tbody.innerHTML = r.map(x => { const i = new Date(x.clock_in + 'Z'); const o = x.clock_out ? new Date(x.clock_out + 'Z') : null; if (x.hours_worked) total += x.hours_worked; return `<tr><td>${i.toLocaleDateString('en-US')}</td><td>${i.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td><td>${o ? o.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}</td><td>${x.hours_worked ? x.hours_worked + ' h' : 'Ongoing'}</td></tr>`; }).join('') || '<tr><td colspan="4" style="text-align:center; color:#6b7280;">No records</td></tr>';
+  document.getElementById('report-total').textContent = 'Total hours: ' + total.toFixed(2) + ' h';
+}
+function esc(s) { if (!s) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+if (token) { const u = localStorage.getItem('hr_user'); if (u) { currentUser = JSON.parse(u); showDashboard(); } }
+</script>
+</body>
+</html>

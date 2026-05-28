@@ -1,0 +1,17 @@
+{
+  "name": "hr-system",
+  "version": "1.0.0",
+  "description": "نظام HR لشركة التوزيع الموسيقي",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "sql.js": "^1.10.3",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5"
+  }
+}
