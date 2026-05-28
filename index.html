@@ -286,8 +286,6 @@ function startWorkTimer(clockIn){
   },1000);
 
 }
-
-async function loadEmpStatus() {
 async function loadEmpStatus() {
   const s = await api('/api/my-status'); if (!s) return;
   const badge = document.getElementById('emp-status-badge');
