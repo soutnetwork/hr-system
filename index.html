@@ -294,11 +294,37 @@ async function loadEmpStatus() {
   badge.className = 'status-badge status-' + (s.online ? s.status : 'offline');
   const dot = badge.querySelector('.dot');
   dot.className = 'dot dot-' + (s.online ? s.status : 'offline');
-  if (s.online) {
-    text.textContent = s.status === 'break' ? 'On Break' : 'Online';
-    const t = new Date(s.clock_in + 'Z').toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    info.textContent = 'Clocked in at ' + t;
-  } else { text.textContent = 'Offline'; info.textContent = 'Not clocked in'; }
+ if (s.online) {
+
+  startWorkTimer(s.clock_in);
+
+  text.textContent =
+  s.status === 'break'
+  ? 'On Break'
+  : 'Online';
+
+  const t = new Date(s.clock_in + 'Z')
+  .toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  info.textContent =
+  'Clocked in at ' + t;
+
+} else {
+
+  clearInterval(workTimerInterval);
+
+  document.getElementById('work-timer')
+  .textContent = '00:00';
+
+  text.textContent = 'Offline';
+
+  info.textContent =
+  'Not clocked in';
+
+}
 }
 async function clockIn() { const r = await api('/api/clock-in', { method: 'POST' }); if (r?.error) alert(r.error); loadEmpStatus(); }
 async function clockOut() { if (!confirm('Confirm clock out?')) return; const r = await api('/api/clock-out', { method: 'POST' }); if (r?.error) alert(r.error); loadEmpStatus(); loadEmpAttendance(); }
