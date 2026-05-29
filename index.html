@@ -257,13 +257,7 @@
         <label>Description (links allowed)</label><textarea id="ett-desc" rows="2"></textarea>
         <label>Assign To</label><select id="ett-assignee"></select>
         <label>Send to Team</label>
-        <select id="ett-team">
-          <option value="">All teams</option>
-          <option value="Copyright">Copyright</option>
-          <option value="Distribution">Distribution</option>
-          <option value="Account Managers">Account Managers</option>
-          <option value="Marketing">Marketing</option>
-        </select>
+        <select id="ett-team" data-team-options="1" data-team-empty="All teams"></select>
         <label>Priority</label>
         <select id="ett-priority"><option value="high">High</option><option value="normal" selected>Normal</option><option value="low">Low</option></select>
         <button onclick="addTeamTaskLead()">Add to Board</button>
@@ -340,6 +334,16 @@
         <div class="stat"><div class="stat-label">Tasks Done Today</div><div class="stat-value" id="stat-tasks">0</div></div>
       </div>
       <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h3 style="margin:0;">Teams</h3>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+          <input id="new-team-name" type="text" placeholder="e.g. Engineering" style="margin:0;flex:1;">
+          <button onclick="createTeam()" style="width:auto;padding:11px 16px;margin:0;white-space:nowrap;">+ Add Team</button>
+        </div>
+        <div id="teams-chips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+      <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
           <h3 style="margin:0;">Employees</h3>
           <button style="width:auto;padding:10px 16px;margin:0;" onclick="showAddEmployee()">+ Add Employee</button>
@@ -366,13 +370,7 @@
         <label>Description</label><textarea id="tt-desc" rows="2"></textarea>
         <label>Assign To</label><select id="tt-assignee"></select>
         <label>Send to Team</label>
-        <select id="tt-team">
-          <option value="">All teams</option>
-          <option value="Copyright">Copyright</option>
-          <option value="Distribution">Distribution</option>
-          <option value="Account Managers">Account Managers</option>
-          <option value="Marketing">Marketing</option>
-        </select>
+        <select id="tt-team" data-team-options="1" data-team-empty="All teams"></select>
         <label>Priority</label>
         <select id="tt-priority"><option value="high">High</option><option value="normal" selected>Normal</option><option value="low">Low</option></select>
         <button onclick="addTeamTask()">Add to Board</button>
@@ -417,6 +415,8 @@
           <button class="secondary" onclick="schedPrev('a')">‹ Prev</button>
           <span class="sched-month" id="asched-month"></span>
           <button class="secondary" onclick="schedNext('a')">Next ›</button>
+          <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:auto;">Team:</span>
+          <select id="sched-team-filter" data-team-options="1" data-team-empty="All Employees" style="width:auto;margin:0;padding:8px 12px;font-size:13px;" onchange="loadSchedule('a')"></select>
         </div>
         <div class="sched-toolbar" style="background:var(--panel2);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">
           <span style="font-size:12px;color:var(--muted);font-weight:600;">Quick Fill:</span>
@@ -443,7 +443,7 @@
         <h3>Create Team Chat <span style="font-size:11px;color:var(--muted);">(Admin)</span></h3>
         <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
           <div><label>Chat Name</label><input id="new-room-name" type="text" placeholder="e.g. Distribution Team"></div>
-          <div><label>For Team</label><select id="new-room-team"><option value="">No team (open to all)</option><option value="Copyright">Copyright</option><option value="Distribution">Distribution</option><option value="Account Managers">Account Managers</option><option value="Marketing">Marketing</option></select></div>
+          <div><label>For Team</label><select id="new-room-team" data-team-options="1" data-team-empty="No team (open to all)"></select></div>
           <button onclick="createRoom()" style="margin:0;">+ Create</button>
         </div>
       </div>
@@ -489,13 +489,7 @@
       <button type="button" class="hours-btn" onclick="selectHours(12,event)">12h</button>
     </div>
     <label>Team</label>
-    <select id="new-emp-team">
-      <option value="">No team</option>
-      <option value="Copyright">Copyright</option>
-      <option value="Distribution">Distribution</option>
-      <option value="Account Managers">Account Managers</option>
-      <option value="Marketing">Marketing</option>
-    </select>
+    <select id="new-emp-team" data-team-options="1" data-team-empty="No team"></select>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="new-emp-lead" style="width:auto;margin:0;"> Team Lead (can create & send team tasks)</label>
     <div class="btn-row"><button class="secondary" onclick="hideModal('modal-add-employee')">Cancel</button><button onclick="createEmployee()">Add Employee</button></div>
   </div>
@@ -524,13 +518,7 @@
     <label>Full Name</label><input id="edit-emp-name" type="text">
     <label>Job Title</label><input id="edit-emp-title" type="text">
     <label>Team</label>
-    <select id="edit-emp-team">
-      <option value="">No team</option>
-      <option value="Copyright">Copyright</option>
-      <option value="Distribution">Distribution</option>
-      <option value="Account Managers">Account Managers</option>
-      <option value="Marketing">Marketing</option>
-    </select>
+    <select id="edit-emp-team" data-team-options="1" data-team-empty="No team"></select>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="edit-emp-lead" style="width:auto;margin:0;"> Team Lead</label>
     <label>Daily Working Hours Target</label>
     <select id="edit-emp-hours">
@@ -615,6 +603,64 @@
 const API='';
 let currentUser=null, token=localStorage.getItem('hr_token');
 let selectedHours=8, timerInterval=null, currentSession=null, chatInterval=null;
+let teamsList = []; // cached list of {id, name}
+
+async function refreshTeams(){
+  const t = await api('/api/teams');
+  if (Array.isArray(t)) { teamsList = t; populateTeamSelects(); renderTeamChips(); }
+  return teamsList;
+}
+
+function renderTeamChips(){
+  const box = document.getElementById('teams-chips');
+  if(!box) return; // not on this page (employee role)
+  if(!teamsList.length){ box.innerHTML = '<p style="color:var(--muted);font-size:12px;">No teams yet. Create one above.</p>'; return; }
+  box.innerHTML = teamsList.map(t => `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--border);padding:7px 10px;border-radius:8px;font-size:12px;"><span style="font-weight:600;">${esc(t.name)}</span><button class="chat-room-del" style="color:var(--muted) !important;" onclick="deleteTeam(${t.id},'${esc(t.name)}')" title="Delete team">×</button></div>`).join('');
+}
+
+async function createTeam(){
+  const name = document.getElementById('new-team-name').value.trim();
+  if(!name){ alert('Type a team name'); return; }
+  const r = await api('/api/teams', { method:'POST', body: JSON.stringify({ name }) });
+  if(r?.error){ alert(r.error); return; }
+  document.getElementById('new-team-name').value = '';
+  await refreshTeams();
+}
+
+async function deleteTeam(id, name){
+  if(!confirm('Delete team "'+name+'"? (only allowed if no employees are on it)')) return;
+  const r = await api('/api/teams/'+id, { method:'DELETE' });
+  if(r?.error){ alert(r.error); return; }
+  await refreshTeams();
+  loadAdminEmployees();
+}
+
+function teamOptions(selected, includeEmpty=true, emptyLabel='No team'){
+  const opts = [];
+  if (includeEmpty) opts.push(`<option value="">${emptyLabel}</option>`);
+  for (const t of teamsList) {
+    opts.push(`<option value="${esc(t.name)}" ${t.name===selected?'selected':''}>${esc(t.name)}</option>`);
+  }
+  return opts.join('');
+}
+
+// Refresh every <select> on the page that has data-team-options="1"
+function populateTeamSelects(){
+  document.querySelectorAll('select[data-team-options]').forEach(sel=>{
+    const current = sel.value;
+    const emptyLabel = sel.getAttribute('data-team-empty') || 'No team';
+    const includeEmpty = sel.getAttribute('data-team-no-empty') !== '1';
+    const includeAll = sel.getAttribute('data-team-all') === '1';
+    let html = '';
+    if (includeAll) html += '<option value="__ALL__">All teams</option>';
+    if (includeEmpty) html += `<option value="">${esc(emptyLabel)}</option>`;
+    for (const t of teamsList) {
+      html += `<option value="${esc(t.name)}" ${t.name===current?'selected':''}>${esc(t.name)}</option>`;
+    }
+    sel.innerHTML = html;
+    if (current) sel.value = current;
+  });
+}
 
 function selectHours(h,ev){ selectedHours=h; document.querySelectorAll('.hours-btn').forEach(b=>b.classList.remove('active')); ev.target.classList.add('active'); }
 
@@ -640,6 +686,8 @@ function showDashboard(){
   const tdInp=document.getElementById('td-comment-input'); if(tdInp && !tdInp._mentionsAttached){ attachMention(tdInp, ()=>'task'); tdInp._mentionsAttached=true; }
   // Load shift colors so the schedule looks right everywhere
   api('/api/shift-colors').then(c=>{ if(c) applyShiftColors(c); });
+  // Load the teams list (populates every team <select> on the page)
+  refreshTeams();
 }
 
 function fmt(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
@@ -1116,10 +1164,23 @@ async function loadSchedule(who){
   }
   const mk = monthKey(schedMonth);
   document.getElementById((isAdmin?'asched':'esched')+'-month').textContent = schedMonth.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  // determine the team filter (admin uses the dropdown; employee is forced server-side)
+  let teamFilter = '';
+  if (isAdmin) {
+    const sel = document.getElementById('sched-team-filter');
+    if (sel) teamFilter = sel.value === '__ALL__' ? '' : (sel.value || '');
+  }
   // employees list
-  const emps = isAdmin ? await api('/api/admin/employees') : await api('/api/teammates');
+  let emps;
+  if (isAdmin) {
+    if (teamFilter) emps = await api('/api/teammates?team='+encodeURIComponent(teamFilter));
+    else emps = await api('/api/admin/employees');
+  } else {
+    emps = await api('/api/teammates'); // server limits to their team
+  }
   if(!emps) return;
-  const data = await api('/api/schedule?month='+mk); if(!data)return;
+  const scheduleUrl = '/api/schedule?month=' + mk + (isAdmin && teamFilter ? '&team='+encodeURIComponent(teamFilter) : '');
+  const data = await api(scheduleUrl); if(!data)return;
   const map = {}; data.forEach(r=>{ map[r.user_id+'_'+r.day]={shift:r.shift,note:r.note}; });
   const year=schedMonth.getFullYear(), month=schedMonth.getMonth();
   const days=new Date(year,month+1,0).getDate();

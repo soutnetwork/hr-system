@@ -78,6 +78,11 @@ async function initDb() {
       room_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
       PRIMARY KEY (room_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   // migrations for older DBs
   try { db.run(`ALTER TABLE users ADD COLUMN daily_hours INTEGER DEFAULT 8`); } catch(e){}
@@ -96,6 +101,16 @@ async function initDb() {
     const company = get(`SELECT id FROM chat_rooms WHERE is_company=1`);
     if (company) run(`UPDATE chat_messages SET room_id=? WHERE room_id=0 OR room_id IS NULL`, [company.id]);
   }
+  // seed default teams (first run); also pull in any team names already assigned to users
+  const defaultTeams = ['Copyright', 'Distribution', 'Account Managers', 'Marketing'];
+  for (const t of defaultTeams) {
+    try { db.run(`INSERT OR IGNORE INTO teams (name) VALUES (?)`, [t]); } catch(e){}
+  }
+  try {
+    const existing = all(`SELECT DISTINCT team FROM users WHERE team!='' AND team IS NOT NULL`);
+    for (const r of existing) { db.run(`INSERT OR IGNORE INTO teams (name) VALUES (?)`, [r.team]); }
+    saveDb();
+  } catch(e){}
 
   if (!get('SELECT id FROM users WHERE username = ?', ['admin'])) {
     const hash = bcrypt.hashSync('admin123', 10);
@@ -268,7 +283,44 @@ app.post('/api/team-tasks/:id/comments', authenticate, (req, res) => {
 
 // list of teammates (for assignee dropdowns) — available to leads too
 app.get('/api/teammates', authenticate, (req, res) => {
-  res.json(all(`SELECT id, full_name, team FROM users WHERE role='employee' ORDER BY full_name`));
+  // Admin can pass ?team=NAME to filter; without it, returns everyone.
+  // Non-admin always gets only members of their own team.
+  let teamFilter = null;
+  if (req.user.role === 'admin') {
+    if (req.query.team !== undefined && req.query.team !== '') teamFilter = req.query.team;
+  } else {
+    const me = get('SELECT team FROM users WHERE id=?', [req.user.id]);
+    teamFilter = me?.team || '';
+  }
+  if (teamFilter === null) {
+    res.json(all(`SELECT id, full_name, team, job_title FROM users WHERE role='employee' ORDER BY full_name`));
+  } else {
+    res.json(all(`SELECT id, full_name, team, job_title FROM users WHERE role='employee' AND team=? ORDER BY full_name`, [teamFilter]));
+  }
+});
+
+// ===== TEAMS =====
+// List teams (everyone can read; needed for filters/dropdowns)
+app.get('/api/teams', authenticate, (req, res) => {
+  res.json(all(`SELECT id, name FROM teams ORDER BY name`));
+});
+// Admin creates a new team
+app.post('/api/teams', authenticate, requireAdmin, (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Team name required' });
+  const clean = name.trim();
+  if (get(`SELECT id FROM teams WHERE name=?`, [clean])) return res.status(400).json({ error: 'Team already exists' });
+  const r = runReturn(`INSERT INTO teams (name) VALUES (?)`, [clean]);
+  res.json({ success: true, id: r.lastInsertRowid, name: clean });
+});
+// Admin deletes a team — only if no employees still on it (safety)
+app.delete('/api/teams/:id', authenticate, requireAdmin, (req, res) => {
+  const t = get(`SELECT name FROM teams WHERE id=?`, [req.params.id]);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  const inUse = get(`SELECT COUNT(*) AS c FROM users WHERE team=?`, [t.name]);
+  if (inUse && inUse.c > 0) return res.status(400).json({ error: 'Cannot delete: '+inUse.c+' employees are still on this team. Move them first.' });
+  run(`DELETE FROM teams WHERE id=?`, [req.params.id]);
+  res.json({ success: true });
 });
 
 // ===== SHIFT TIME SETTINGS =====
@@ -302,7 +354,20 @@ app.put('/api/shift-colors', authenticate, requireAdmin, (req, res) => {
 app.get('/api/schedule', authenticate, (req, res) => {
   const month = (req.query.month || '').slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Invalid month' });
-  res.json(all(`SELECT user_id, day, shift, note FROM schedule WHERE day LIKE ?`, [month + '-%']));
+  // Optional team scope: admin can request any team; non-admin is forced to their own team.
+  let teamFilter = null;
+  if (req.user.role === 'admin') {
+    if (req.query.team !== undefined && req.query.team !== '') teamFilter = req.query.team;
+  } else {
+    const me = get('SELECT team FROM users WHERE id=?', [req.user.id]);
+    teamFilter = me?.team || '';
+  }
+  if (teamFilter === null) {
+    res.json(all(`SELECT user_id, day, shift, note FROM schedule WHERE day LIKE ?`, [month + '-%']));
+  } else {
+    // join users to keep only people in that team
+    res.json(all(`SELECT s.user_id, s.day, s.shift, s.note FROM schedule s JOIN users u ON s.user_id=u.id WHERE s.day LIKE ? AND u.team=?`, [month + '-%', teamFilter]));
+  }
 });
 app.put('/api/schedule', authenticate, requireAdmin, (req, res) => {
   const { user_id, day, shift, note } = req.body;
