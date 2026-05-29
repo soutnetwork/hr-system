@@ -117,6 +117,7 @@ async function initDb() {
       icon TEXT DEFAULT '',
       username TEXT DEFAULT '',
       password_enc TEXT DEFAULT '',
+      teams_csv TEXT DEFAULT '',
       sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -145,6 +146,7 @@ async function initDb() {
   try { db.run(`ALTER TABLE chat_messages ADD COLUMN room_id INTEGER DEFAULT 0`); } catch(e){}
   try { db.run(`ALTER TABLE tools ADD COLUMN username TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE tools ADD COLUMN password_enc TEXT DEFAULT ''`); } catch(e){}
+  try { db.run(`ALTER TABLE tools ADD COLUMN teams_csv TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`); } catch(e){}
 
   // ensure a default Company room exists (id=1)
@@ -448,13 +450,36 @@ app.get('/api/teammates', authenticate, (req, res) => {
 // ===== TEAMS =====
 // List teams (everyone can read; needed for filters/dropdowns)
 // ===== TOOLS (custom external links shown in top bar) =====
-// List tools — only mark whether a credential exists; never return password
+// Helper: turn array of team names into a CSV string
+function toolsTeamsToCsv(arr){
+  if (!Array.isArray(arr)) return '';
+  return arr.map(s => String(s||'').trim()).filter(Boolean).join(',');
+}
+function toolsCsvToArray(csv){
+  if (!csv) return [];
+  return String(csv).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+// List tools — admin sees all; employees see only ones for their team (or unrestricted ones)
 app.get('/api/tools', authenticate, (req, res) => {
-  const rows = all(`SELECT id, name, url, icon, username, password_enc, sort_order FROM tools ORDER BY sort_order, id`);
-  res.json(rows.map(r => ({
+  const rows = all(`SELECT id, name, url, icon, username, password_enc, teams_csv, sort_order FROM tools ORDER BY sort_order, id`);
+  let visible;
+  if (req.user.role === 'admin') {
+    visible = rows; // admin sees everything
+  } else {
+    const me = get('SELECT team FROM users WHERE id=?', [req.user.id]);
+    const myTeam = (me?.team || '').toLowerCase();
+    visible = rows.filter(r => {
+      const list = toolsCsvToArray(r.teams_csv);
+      if (!list.length) return true; // empty teams = visible to everyone
+      return list.some(t => t.toLowerCase() === myTeam);
+    });
+  }
+  res.json(visible.map(r => ({
     id: r.id, name: r.name, url: r.url, icon: r.icon, sort_order: r.sort_order,
     username: r.username || '',
-    has_password: !!(r.password_enc && r.password_enc.length)
+    has_password: !!(r.password_enc && r.password_enc.length),
+    teams: toolsCsvToArray(r.teams_csv)
   })));
 });
 // Reveal password (admin only) — separate endpoint so it's an explicit action
@@ -464,16 +489,17 @@ app.get('/api/tools/:id/credentials', authenticate, requireAdmin, (req, res) => 
   res.json({ username: t.username || '', password: decryptPwd(t.password_enc || '') });
 });
 app.post('/api/tools', authenticate, requireAdmin, (req, res) => {
-  const { name, url, icon, username, password, sort_order } = req.body;
+  const { name, url, icon, username, password, teams, sort_order } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'Name and URL are required' });
   if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'URL must start with http:// or https://' });
   const enc = password ? encryptPwd(password) : '';
-  const r = runReturn(`INSERT INTO tools (name, url, icon, username, password_enc, sort_order) VALUES (?,?,?,?,?,?)`,
-    [name.trim(), url.trim(), (icon || '').trim(), (username || '').trim(), enc, sort_order || 0]);
+  const csv = toolsTeamsToCsv(teams);
+  const r = runReturn(`INSERT INTO tools (name, url, icon, username, password_enc, teams_csv, sort_order) VALUES (?,?,?,?,?,?,?)`,
+    [name.trim(), url.trim(), (icon || '').trim(), (username || '').trim(), enc, csv, sort_order || 0]);
   res.json({ success: true, id: r.lastInsertRowid });
 });
 app.patch('/api/tools/:id', authenticate, requireAdmin, (req, res) => {
-  const { name, url, icon, username, password, sort_order } = req.body;
+  const { name, url, icon, username, password, teams, sort_order } = req.body;
   if (name !== undefined) run(`UPDATE tools SET name=? WHERE id=?`, [name, req.params.id]);
   if (url !== undefined) {
     if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'URL must start with http:// or https://' });
@@ -485,6 +511,7 @@ app.patch('/api/tools/:id', authenticate, requireAdmin, (req, res) => {
     // empty string clears the password; non-empty replaces it
     run(`UPDATE tools SET password_enc=? WHERE id=?`, [password ? encryptPwd(password) : '', req.params.id]);
   }
+  if (teams !== undefined) run(`UPDATE tools SET teams_csv=? WHERE id=?`, [toolsTeamsToCsv(teams), req.params.id]);
   if (sort_order !== undefined) run(`UPDATE tools SET sort_order=? WHERE id=?`, [sort_order, req.params.id]);
   res.json({ success: true });
 });

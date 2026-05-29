@@ -703,6 +703,8 @@
           <div><label>Username / Email <span style="color:var(--muted);font-weight:400;">(optional)</span></label><input id="new-tool-user" type="text" placeholder="user@company.com" style="margin:0;" autocomplete="off"></div>
           <div><label>Password <span style="color:var(--muted);font-weight:400;">(optional)</span></label><input id="new-tool-pass" type="password" placeholder="••••••••" style="margin:0;" autocomplete="new-password"></div>
         </div>
+        <label>Visible To <span style="color:var(--muted);font-weight:400;font-size:11px;">(leave all unchecked = visible to everyone)</span></label>
+        <div id="new-tool-teams" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;"></div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
           <p style="font-size:11px;color:var(--red);margin:0;">⚠️ Passwords are encrypted but stored on this server. For high-security tools, use a password manager instead.</p>
           <button onclick="createTool()" style="width:auto;padding:11px 18px;margin:0;white-space:nowrap;">+ Add Tool</button>
@@ -759,6 +761,23 @@
       <h3 style="font-size:13px;color:var(--gold-soft);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">About</h3>
       <p id="pp-bio" style="font-size:13px;color:var(--text);line-height:1.6;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;white-space:pre-wrap;">No description yet.</p>
     </div>
+  </div>
+</div>
+
+<!-- Edit Tool Modal -->
+<div id="modal-edit-tool" class="modal-bg hidden">
+  <div class="modal" style="max-width:520px;">
+    <h3>Edit Tool</h3>
+    <div id="edit-tool-error" class="alert alert-error hidden"></div>
+    <label>Name</label><input id="edit-tool-name" type="text">
+    <label>URL</label><input id="edit-tool-url" type="text" placeholder="https://...">
+    <label>Icon (emoji or image URL)</label><input id="edit-tool-icon" type="text">
+    <label>Username / Email <span style="color:var(--muted);font-weight:400;">(optional)</span></label><input id="edit-tool-user" type="text" autocomplete="off">
+    <label>Password <span style="color:var(--muted);font-weight:400;font-size:11px;">(leave empty to keep current; enter a new value to replace)</span></label>
+    <input id="edit-tool-pass" type="password" placeholder="(unchanged)" autocomplete="new-password">
+    <label>Visible To <span style="color:var(--muted);font-weight:400;font-size:11px;">(leave all unchecked = visible to everyone)</span></label>
+    <div id="edit-tool-teams" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;"></div>
+    <div class="btn-row"><button class="secondary" onclick="hideModal('modal-edit-tool')">Cancel</button><button onclick="saveToolEdit()">Save Changes</button></div>
   </div>
 </div>
 
@@ -1090,7 +1109,30 @@ async function loadToolsTopbar(){
   }).join('');
 }
 
+// Render team checkbox group inside a container, based on the cached teamsList
+function renderToolTeamChecks(containerId, selectedTeams){
+  const box = document.getElementById(containerId);
+  if(!box) return;
+  if(!teamsList.length){ box.innerHTML = '<span style="color:var(--muted);font-size:12px;">No teams yet — create some from the Employees page.</span>'; return; }
+  const sel = new Set((selectedTeams || []).map(s => String(s).toLowerCase()));
+  box.innerHTML = teamsList.map(t => {
+    const checked = sel.has(t.name.toLowerCase()) ? 'checked' : '';
+    return `<label style="display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);padding:6px 10px;border-radius:7px;font-size:12px;cursor:pointer;font-weight:500;">
+      <input type="checkbox" value="${esc(t.name)}" ${checked} style="width:auto;margin:0;"> ${esc(t.name)}
+    </label>`;
+  }).join('');
+}
+
+function readToolTeams(containerId){
+  const box = document.getElementById(containerId); if(!box) return [];
+  return Array.from(box.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+}
+
 async function loadToolsAdmin(){
+  // Make sure the team list is fresh before rendering checkboxes
+  await refreshTeams();
+  // Render team checkboxes for the "Add new tool" form (always empty by default)
+  renderToolTeamChecks('new-tool-teams', []);
   const tools = await api('/api/tools'); if(!Array.isArray(tools)) return;
   const box = document.getElementById('tools-admin-list');
   if(!box) return;
@@ -1103,18 +1145,23 @@ async function loadToolsAdmin(){
     const credBadge = (t.username || t.has_password)
       ? `<span class="pri pri-normal" style="margin-left:8px;">🔑 Has credentials</span>`
       : '';
+    const teamsList2 = (t.teams && t.teams.length)
+      ? `<div style="font-size:11px;color:var(--blue);margin-top:3px;">👁 Visible to: ${t.teams.map(esc).join(', ')}</div>`
+      : `<div style="font-size:11px;color:var(--green);margin-top:3px;">👁 Visible to everyone</div>`;
     const credBtn = (t.username || t.has_password)
-      ? `<button class="secondary" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="showToolCreds(${t.id}, '${esc(t.name)}')">View Credentials</button>`
-      : `<button class="secondary" style="width:auto;padding:6px 12px;margin:0;font-size:11px;opacity:.55;" onclick="addToolCreds(${t.id}, '${esc(t.name)}')">+ Add Credentials</button>`;
+      ? `<button class="secondary" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="showToolCreds(${t.id}, '${esc(t.name)}')">View Creds</button>`
+      : '';
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--border);">
       <div style="width:36px;display:flex;justify-content:center;">${iconHtml}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;font-size:13px;">${esc(t.name)} ${credBadge}</div>
         <div style="font-size:11px;color:var(--muted);word-break:break-all;"><a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:var(--muted);">${esc(t.url)}</a></div>
         ${t.username ? `<div style="font-size:11px;color:var(--gold-soft);margin-top:2px;">👤 ${esc(t.username)}</div>` : ''}
+        ${teamsList2}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
         ${credBtn}
+        <button class="secondary" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="openEditTool(${t.id})">Edit</button>
         <button class="danger" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="deleteTool(${t.id},'${esc(t.name)}')">Delete</button>
       </div>
     </div>`;
@@ -1127,10 +1174,13 @@ async function createTool(){
   const icon = document.getElementById('new-tool-icon').value.trim();
   const username = document.getElementById('new-tool-user').value;
   const password = document.getElementById('new-tool-pass').value;
+  const teams = readToolTeams('new-tool-teams');
   if(!name || !url){ alert('Name and URL are required'); return; }
-  const r = await api('/api/tools', { method:'POST', body: JSON.stringify({ name, url, icon, username, password }) });
+  const r = await api('/api/tools', { method:'POST', body: JSON.stringify({ name, url, icon, username, password, teams }) });
   if(r?.error){ alert(r.error); return; }
   ['new-tool-name','new-tool-url','new-tool-icon','new-tool-user','new-tool-pass'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  // also uncheck team boxes
+  document.querySelectorAll('#new-tool-teams input[type="checkbox"]').forEach(cb=>cb.checked=false);
   loadToolsAdmin(); loadToolsTopbar();
 }
 
@@ -1138,6 +1188,44 @@ async function deleteTool(id, name){
   if(!confirm('Delete tool "'+name+'"?')) return;
   const r = await api('/api/tools/'+id, { method:'DELETE' });
   if(r?.error){ alert(r.error); return; }
+  loadToolsAdmin(); loadToolsTopbar();
+}
+
+let editingToolId = null;
+async function openEditTool(id){
+  // Get fresh data for this tool from the list
+  const tools = await api('/api/tools');
+  const t = (tools || []).find(x => x.id === id);
+  if(!t){ alert('Tool not found'); return; }
+  editingToolId = id;
+  document.getElementById('edit-tool-error').classList.add('hidden');
+  document.getElementById('edit-tool-name').value = t.name || '';
+  document.getElementById('edit-tool-url').value = t.url || '';
+  document.getElementById('edit-tool-icon').value = t.icon || '';
+  document.getElementById('edit-tool-user').value = t.username || '';
+  document.getElementById('edit-tool-pass').value = '';
+  document.getElementById('edit-tool-pass').placeholder = t.has_password ? '(password is set — leave empty to keep)' : '(no password set)';
+  await refreshTeams();
+  renderToolTeamChecks('edit-tool-teams', t.teams || []);
+  document.getElementById('modal-edit-tool').classList.remove('hidden');
+}
+async function saveToolEdit(){
+  if(!editingToolId) return;
+  const err = document.getElementById('edit-tool-error'); err.classList.add('hidden');
+  const body = {
+    name: document.getElementById('edit-tool-name').value.trim(),
+    url: document.getElementById('edit-tool-url').value.trim(),
+    icon: document.getElementById('edit-tool-icon').value.trim(),
+    username: document.getElementById('edit-tool-user').value,
+    teams: readToolTeams('edit-tool-teams')
+  };
+  // Only include password if the admin typed something (empty = keep existing)
+  const pw = document.getElementById('edit-tool-pass').value;
+  if (pw) body.password = pw;
+  if (!body.name || !body.url){ err.textContent='Name and URL are required'; err.classList.remove('hidden'); return; }
+  const r = await api('/api/tools/'+editingToolId, { method:'PATCH', body: JSON.stringify(body) });
+  if(r?.error){ err.textContent=r.error; err.classList.remove('hidden'); return; }
+  hideModal('modal-edit-tool');
   loadToolsAdmin(); loadToolsTopbar();
 }
 
