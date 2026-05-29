@@ -160,6 +160,25 @@
   .mention-item .mi-job { font-size: 11px; color: var(--muted); }
   .mention-tag { color: var(--gold-soft); font-weight: 600; background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; }
 
+  /* Reports */
+  .rep-emp { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .rep-emp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; cursor: pointer; }
+  .rep-emp-head:hover { background: rgba(255,255,255,.03); }
+  .rep-emp-name { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .rep-emp-name .nm { font-weight: 600; font-size: 14px; }
+  .rep-emp-name .jt { font-size: 11px; color: var(--muted); }
+  .rep-chip { display:inline-block; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; color: var(--text); margin-left: 6px; }
+  .rep-emp-stats { display: flex; gap: 14px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .rep-emp-stats b { color: var(--text); font-weight: 600; }
+  .rep-emp-body { padding: 14px; border-top: 1px solid var(--border); background: var(--panel); display: none; }
+  .rep-emp.open .rep-emp-body { display: block; }
+  .rep-emp-body h5 { font-size: 12px; color: var(--gold-soft); margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+  .rep-recent-item { font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); display: flex; justify-content: space-between; gap: 10px; }
+  .rep-recent-item:last-child { border-bottom: none; }
+  .rep-kind { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .rep-kind.personal { background: rgba(95,184,120,.18); color: var(--green); }
+  .rep-kind.team { background: rgba(107,140,206,.18); color: var(--blue); }
+
   /* Schedule */
   .sched-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   .sched-toolbar button { width: auto; padding: 9px 16px; margin: 0; }
@@ -462,10 +481,54 @@
 
     <div id="admin-tab-reports" class="hidden">
       <div class="card">
-        <h3>Attendance Report</h3>
-        <select id="report-user-select" onchange="loadReport()"></select>
-        <div style="overflow-x:auto;margin-top:14px;"><table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th></tr></thead><tbody id="admin-report-table"></tbody></table></div>
-        <p id="report-total" style="margin-top:14px;font-size:14px;color:var(--gold-soft);font-weight:600;"></p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;">
+          <div><label>Period</label>
+            <select id="report-period" onchange="changeReportPeriod()" style="width:auto;min-width:170px;margin:0;">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="this_month">This month</option>
+              <option value="last_month">Last month</option>
+              <option value="custom">Custom range</option>
+            </select>
+          </div>
+          <div id="report-custom-range" style="display:none;gap:10px;">
+            <div><label>From</label><input id="report-from" type="date" style="margin:0;"></div>
+            <div><label>To</label><input id="report-to" type="date" style="margin:0;"></div>
+          </div>
+          <div><label>Team</label>
+            <select id="report-team" data-team-options="1" data-team-empty="All Teams" style="width:auto;min-width:160px;margin:0;"></select>
+          </div>
+          <button onclick="loadAnalytics()" style="width:auto;padding:11px 18px;margin:0;">Run Report</button>
+          <button class="secondary" onclick="exportAnalyticsCSV()" style="width:auto;padding:11px 14px;margin:0;">Export CSV</button>
+        </div>
+        <p id="report-period-label" style="margin-top:10px;font-size:12px;color:var(--muted);"></p>
+      </div>
+
+      <!-- Company totals -->
+      <div class="grid-4" id="report-totals" style="display:none;">
+        <div class="stat"><div class="stat-label">Employees</div><div class="stat-value" id="rt-employees">0</div></div>
+        <div class="stat"><div class="stat-label">Hours Worked</div><div class="stat-value" id="rt-hours" style="color:var(--gold-soft);">0</div></div>
+        <div class="stat"><div class="stat-label">Tasks Completed</div><div class="stat-value" id="rt-done" style="color:var(--green);">0</div></div>
+        <div class="stat"><div class="stat-label">Tasks Open</div><div class="stat-value" id="rt-open" style="color:var(--blue);">0</div></div>
+      </div>
+
+      <!-- Per-team breakdown -->
+      <div class="card" id="report-teams-card" style="display:none;">
+        <h3>Per-Team Breakdown</h3>
+        <div style="overflow-x:auto;">
+          <table><thead><tr>
+            <th>Team</th><th>People</th><th>Hours</th>
+            <th>Personal: Done / In&nbsp;Prog / Pending</th>
+            <th>Team Tasks: Done / Open</th>
+            <th>Time on Tasks</th>
+          </tr></thead><tbody id="report-teams-body"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Per-employee detail -->
+      <div class="card" id="report-employees-card" style="display:none;">
+        <h3>Employee Details</h3>
+        <div id="report-employees-list"></div>
       </div>
     </div>
   </div>
@@ -688,6 +751,14 @@ function showDashboard(){
   api('/api/shift-colors').then(c=>{ if(c) applyShiftColors(c); });
   // Load the teams list (populates every team <select> on the page)
   refreshTeams();
+  // Set default report range to last 30 days
+  if(currentUser.role==='admin'){
+    const today = new Date();
+    const from = new Date(today.getTime() - 29*86400000);
+    const fmt = d => d.toISOString().slice(0,10);
+    const f = document.getElementById('report-from'); if(f) f.value = fmt(from);
+    const t = document.getElementById('report-to'); if(t) t.value = fmt(today);
+  }
 }
 
 function fmt(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
@@ -749,6 +820,7 @@ function switchAdminTab(tab,ev){
   if(tab==='employees'||tab==='ptasks'||tab==='board')loadAdminEmployees();
   if(tab==='board')loadBoard('a');
   if(tab==='schedule')loadSchedule('a');
+  if(tab==='reports')loadAnalytics();
   if(tab==='chat'){loadRooms('admin');loadChat('admin');chatInterval=setInterval(()=>{loadRooms('admin');loadChat('admin');},5000);}
 }
 
@@ -820,8 +892,137 @@ async function loadEmpTasks(){
   list.innerHTML=tasks.map(t=>{let ti=t.time_spent_seconds?`<div class="task-time">Time spent: ${fmt(t.time_spent_seconds)}</div>`:'';return `<div class="task-item ${t.status}"><div class="task-content"><div class="task-title">${esc(t.title)}</div>${t.description?`<div class="task-desc">${esc(t.description)}</div>`:''}${ti}<div style="font-size:11px;color:#66635a;margin-top:4px;">${t.assigned_date} — ${t.status==='done'?'<span style="color:var(--green);">Completed</span>':t.status==='in_progress'?'<span style="color:var(--gold);">In Progress</span>':'<span>Pending</span>'}</div></div><button class="danger" style="padding:6px 12px;font-size:12px;width:auto;margin:0;" onclick="deleteTask(${t.id})">Delete</button></div>`;}).join('');
 }
 async function deleteTask(id){if(!confirm('Delete this task?'))return;await api('/api/admin/tasks/'+id,{method:'DELETE'});loadEmpTasks();}
+// ===== ANALYTICS / REPORTS =====
+let lastAnalytics = null;
+
+function changeReportPeriod(){
+  const v = document.getElementById('report-period').value;
+  document.getElementById('report-custom-range').style.display = (v === 'custom') ? 'flex' : 'none';
+}
+
+function periodRange(){
+  const sel = document.getElementById('report-period').value;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const fmt = (d)=> d.toISOString().slice(0,10);
+  if(sel === 'custom'){
+    const f = document.getElementById('report-from').value;
+    const t = document.getElementById('report-to').value;
+    return { from: f || fmt(new Date(today.getTime()-30*86400000)), to: t || fmt(today) };
+  }
+  if(sel === '7'){ const f = new Date(today.getTime()-6*86400000); return { from: fmt(f), to: fmt(today) }; }
+  if(sel === '30'){ const f = new Date(today.getTime()-29*86400000); return { from: fmt(f), to: fmt(today) }; }
+  if(sel === 'this_month'){ const f = new Date(today.getFullYear(), today.getMonth(), 1); return { from: fmt(f), to: fmt(today) }; }
+  if(sel === 'last_month'){ const f = new Date(today.getFullYear(), today.getMonth()-1, 1); const t = new Date(today.getFullYear(), today.getMonth(), 0); return { from: fmt(f), to: fmt(t) }; }
+  return { from: fmt(today), to: fmt(today) };
+}
+
+function secToHMS(s){ if(!s) return '0m'; const h=Math.floor(s/3600), m=Math.floor((s%3600)/60); if(h>0) return h+'h '+m+'m'; return m+'m'; }
+
+async function loadAnalytics(){
+  const { from, to } = periodRange();
+  const team = document.getElementById('report-team').value || '';
+  const teamQ = (team && team !== '__ALL__') ? '&team=' + encodeURIComponent(team) : '';
+  document.getElementById('report-period-label').textContent = 'Showing data from ' + from + ' to ' + to + (team && team !== '__ALL__' ? ' · Team: ' + team : ' · All teams');
+  const data = await api('/api/admin/analytics?from=' + from + '&to=' + to + teamQ);
+  if(!data || data.error){ alert(data?.error || 'Failed to load report'); return; }
+  lastAnalytics = data;
+
+  // Totals
+  document.getElementById('report-totals').style.display = 'grid';
+  document.getElementById('rt-employees').textContent = data.totals.employees || 0;
+  document.getElementById('rt-hours').textContent = (data.totals.hours_worked || 0).toFixed(1) + 'h';
+  document.getElementById('rt-done').textContent = (data.totals.personal_done || 0) + (data.totals.team_done || 0);
+  document.getElementById('rt-open').textContent = (data.totals.personal_in_progress || 0) + (data.totals.personal_pending || 0) + (data.totals.team_open || 0);
+
+  // Teams table
+  const tbody = document.getElementById('report-teams-body');
+  document.getElementById('report-teams-card').style.display = data.teams.length ? 'block' : 'none';
+  tbody.innerHTML = data.teams.map(t => `<tr>
+    <td style="font-weight:600;">${esc(t.name)}</td>
+    <td>${t.employees}</td>
+    <td>${t.hours_worked.toFixed(1)}h</td>
+    <td><span style="color:var(--green);">${t.personal_done}</span> / <span style="color:var(--gold-soft);">${t.personal_in_progress}</span> / <span style="color:var(--muted);">${t.personal_pending}</span></td>
+    <td><span style="color:var(--green);">${t.team_done}</span> / <span style="color:var(--blue);">${t.team_open}</span></td>
+    <td>${secToHMS(t.time_spent_sec)}</td>
+  </tr>`).join('');
+
+  // Employees (grouped by team)
+  document.getElementById('report-employees-card').style.display = data.employees.length ? 'block' : 'none';
+  const empList = document.getElementById('report-employees-list');
+  if(!data.employees.length){ empList.innerHTML = '<p style="color:var(--muted);font-size:12px;">No employees in this scope</p>'; return; }
+
+  // Group by team
+  const byTeam = {};
+  for(const e of data.employees){ const k = e.team || '(No team)'; (byTeam[k] ||= []).push(e); }
+  const teamsSorted = Object.keys(byTeam).sort();
+
+  let html = '';
+  for(const teamName of teamsSorted){
+    html += `<h4 style="margin:14px 0 8px;color:var(--gold-soft);font-size:13px;text-transform:uppercase;letter-spacing:1px;">${esc(teamName)}</h4>`;
+    for(const e of byTeam[teamName]){
+      const targetH = e.daily_hours || 8;
+      const recentHtml = e.recent_done.length
+        ? e.recent_done.map(r => `<div class="rep-recent-item"><span><span class="rep-kind ${r.kind}">${r.kind === 'team' ? 'TEAM' : 'PERSONAL'}</span> ${esc(r.title)}</span><span style="color:var(--muted);font-size:11px;">${r.at ? new Date(r.at+'Z').toLocaleDateString('en-US',{day:'numeric',month:'short'}) : ''}${r.time ? ' · '+secToHMS(r.time) : ''}</span></div>`).join('')
+        : '<p style="color:var(--muted);font-size:12px;">No completed tasks in this period</p>';
+      html += `
+      <div class="rep-emp" data-id="${e.id}">
+        <div class="rep-emp-head" onclick="this.parentElement.classList.toggle('open')">
+          <div class="rep-emp-name">
+            <div class="avatar">${esc(initials(e.full_name))}</div>
+            <div><div class="nm">${esc(e.full_name)}</div><div class="jt">${esc(e.job_title || '—')}</div></div>
+          </div>
+          <div class="rep-emp-stats">
+            <span>Hours: <b>${e.hours_worked.toFixed(1)}h</b></span>
+            <span>Done: <b style="color:var(--green);">${e.personal_tasks.done + e.team_tasks.done}</b></span>
+            <span>Open: <b style="color:var(--blue);">${e.personal_tasks.in_progress + e.personal_tasks.pending + e.team_tasks.open}</b></span>
+          </div>
+        </div>
+        <div class="rep-emp-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;">
+            <div class="stat"><div class="stat-label">Hours Worked</div><div class="stat-value" style="font-size:18px;">${e.hours_worked.toFixed(1)}h <span style="font-size:11px;color:var(--muted);">/ ${targetH}h target</span></div></div>
+            <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value" style="font-size:18px;">${e.sessions}</div></div>
+            <div class="stat"><div class="stat-label">Personal Tasks</div><div class="stat-value" style="font-size:14px;"><span style="color:var(--green);">${e.personal_tasks.done} Done</span> · <span style="color:var(--gold-soft);">${e.personal_tasks.in_progress} In Prog</span> · <span style="color:var(--muted);">${e.personal_tasks.pending} Pending</span></div></div>
+            <div class="stat"><div class="stat-label">Team Tasks</div><div class="stat-value" style="font-size:14px;"><span style="color:var(--green);">${e.team_tasks.done} Done</span> · <span style="color:var(--blue);">${e.team_tasks.open} Open</span></div></div>
+            <div class="stat"><div class="stat-label">Time on Tasks</div><div class="stat-value" style="font-size:18px;">${secToHMS(e.personal_tasks.time_spent_sec)}</div></div>
+          </div>
+          <h5>Recently completed</h5>
+          ${recentHtml}
+        </div>
+      </div>`;
+    }
+  }
+  empList.innerHTML = html;
+}
+
+function csvCell(v){
+  const s = String(v == null ? '' : v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function exportAnalyticsCSV(){
+  if(!lastAnalytics){ alert('Run a report first'); return; }
+  const rows = [];
+  rows.push(['Employee','Team','Job Title','Hours','Sessions','Personal Done','Personal In Progress','Personal Pending','Team Done','Team Open','Time on Tasks (min)']);
+  for(const e of lastAnalytics.employees){
+    rows.push([
+      e.full_name, e.team, e.job_title,
+      e.hours_worked, e.sessions,
+      e.personal_tasks.done, e.personal_tasks.in_progress, e.personal_tasks.pending,
+      e.team_tasks.done, e.team_tasks.open,
+      Math.round((e.personal_tasks.time_spent_sec||0)/60)
+    ]);
+  }
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = 'hr-report-' + lastAnalytics.from + '-to-' + lastAnalytics.to + '.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// keep older loadReport intact in case anything calls it
 async function loadReport(){
-  const u=document.getElementById('report-user-select').value;if(!u)return;
+  const u=document.getElementById('report-user-select')?.value;if(!u)return;
   const r=await api('/api/admin/attendance/'+u);if(!r)return;const tb=document.getElementById('admin-report-table');let tot=0;
   tb.innerHTML=r.map(x=>{const i=new Date(x.clock_in+'Z'),o=x.clock_out?new Date(x.clock_out+'Z'):null;if(x.hours_worked)tot+=x.hours_worked;return `<tr><td>${i.toLocaleDateString('en-US')}</td><td>${i.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td><td>${o?o.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</td><td>${x.hours_worked?x.hours_worked+' h':'Ongoing'}</td></tr>`;}).join('')||'<tr><td colspan="4" style="text-align:center;color:#66635a;">No records</td></tr>';
   document.getElementById('report-total').textContent='Total hours: '+tot.toFixed(2)+' h';

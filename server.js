@@ -545,4 +545,148 @@ app.get('/api/admin/tasks/:userId', authenticate, requireAdmin, (req, res) => {
   res.json(all(`SELECT * FROM tasks WHERE user_id=? ORDER BY assigned_date DESC, created_at DESC LIMIT 100`, [req.params.userId]));
 });
 
+// ===== ANALYTICS / DETAILED REPORTS =====
+// Returns per-team and per-user stats for a date range, with optional team filter.
+// Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD&team=NAME
+app.get('/api/admin/analytics', authenticate, requireAdmin, (req, res) => {
+  const from = req.query.from || '1900-01-01';
+  const to   = req.query.to   || '2999-12-31';
+  const teamFilter = req.query.team && req.query.team !== '__ALL__' ? req.query.team : null;
+
+  // Pull all employees (optionally filtered by team)
+  const emps = teamFilter
+    ? all(`SELECT id, full_name, team, job_title, daily_hours FROM users WHERE role='employee' AND team=? ORDER BY team, full_name`, [teamFilter])
+    : all(`SELECT id, full_name, team, job_title, daily_hours FROM users WHERE role='employee' ORDER BY team, full_name`);
+
+  if (!emps.length) return res.json({ from, to, team: teamFilter, teams: [], employees: [], totals: {} });
+
+  const ids = emps.map(e => e.id);
+  const placeholders = ids.map(()=>'?').join(',');
+
+  // Attendance per user (sessions overlapping the date range)
+  // We sum hours_worked for sessions whose clock_in falls in [from..to].
+  const attendance = all(
+    `SELECT user_id,
+            COUNT(*) AS sessions,
+            SUM(CASE WHEN clock_out IS NOT NULL THEN (julianday(clock_out)-julianday(clock_in))*24 ELSE 0 END) AS hours_worked,
+            SUM(CASE WHEN clock_out IS NULL THEN 1 ELSE 0 END) AS open_sessions
+       FROM attendance
+      WHERE user_id IN (${placeholders}) AND date(clock_in) BETWEEN ? AND ?
+   GROUP BY user_id`,
+    [...ids, from, to]
+  );
+  const attMap = {}; attendance.forEach(r => { attMap[r.user_id] = r; });
+
+  // Personal tasks per user, grouped by status
+  const tasks = all(
+    `SELECT user_id, status, COUNT(*) AS c, SUM(COALESCE(time_spent_seconds,0)) AS sec
+       FROM tasks
+      WHERE user_id IN (${placeholders}) AND assigned_date BETWEEN ? AND ?
+   GROUP BY user_id, status`,
+    [...ids, from, to]
+  );
+  const taskMap = {}; // {user_id: {done, in_progress, pending, total_sec, total}}
+  tasks.forEach(r => {
+    if (!taskMap[r.user_id]) taskMap[r.user_id] = { done:0, in_progress:0, pending:0, total_sec:0, total:0 };
+    taskMap[r.user_id][r.status] = r.c;
+    taskMap[r.user_id].total += r.c;
+    if (r.status === 'done') taskMap[r.user_id].total_sec += (r.sec || 0);
+  });
+
+  // Team task contributions per user (assignee) within the period
+  const teamTaskDone = all(
+    `SELECT assignee_id AS user_id, COUNT(*) AS c
+       FROM team_tasks
+      WHERE assignee_id IN (${placeholders}) AND status='done'
+        AND date(COALESCE(completed_at, created_at)) BETWEEN ? AND ?
+   GROUP BY assignee_id`,
+    [...ids, from, to]
+  );
+  const teamTaskOpen = all(
+    `SELECT assignee_id AS user_id, COUNT(*) AS c
+       FROM team_tasks
+      WHERE assignee_id IN (${placeholders}) AND status!='done'
+        AND date(created_at) BETWEEN ? AND ?
+   GROUP BY assignee_id`,
+    [...ids, from, to]
+  );
+  const ttDone = {}; teamTaskDone.forEach(r => { ttDone[r.user_id] = r.c; });
+  const ttOpen = {}; teamTaskOpen.forEach(r => { ttOpen[r.user_id] = r.c; });
+
+  // Recent completed tasks (personal + team) per user — small sample
+  const recentPersonal = all(
+    `SELECT user_id, title, time_spent_seconds, completed_at
+       FROM tasks
+      WHERE user_id IN (${placeholders}) AND status='done'
+        AND date(COALESCE(completed_at, assigned_date)) BETWEEN ? AND ?
+   ORDER BY COALESCE(completed_at, assigned_date) DESC
+      LIMIT 200`,
+    [...ids, from, to]
+  );
+  const recentTeam = all(
+    `SELECT assignee_id AS user_id, title, completed_at
+       FROM team_tasks
+      WHERE assignee_id IN (${placeholders}) AND status='done'
+        AND date(COALESCE(completed_at, created_at)) BETWEEN ? AND ?
+   ORDER BY COALESCE(completed_at, created_at) DESC
+      LIMIT 200`,
+    [...ids, from, to]
+  );
+  const recentMap = {};
+  recentPersonal.forEach(r => { (recentMap[r.user_id] ||= []).push({ kind:'personal', title:r.title, time:r.time_spent_seconds||0, at:r.completed_at }); });
+  recentTeam.forEach(r => { (recentMap[r.user_id] ||= []).push({ kind:'team', title:r.title, time:0, at:r.completed_at }); });
+  // keep top 5 per user
+  for (const k of Object.keys(recentMap)) recentMap[k] = recentMap[k].slice(0, 5);
+
+  // Build per-employee rows
+  const employees = emps.map(e => {
+    const a = attMap[e.id] || { sessions:0, hours_worked:0, open_sessions:0 };
+    const t = taskMap[e.id] || { done:0, in_progress:0, pending:0, total_sec:0, total:0 };
+    return {
+      id: e.id,
+      full_name: e.full_name,
+      team: e.team || '',
+      job_title: e.job_title || '',
+      daily_hours: e.daily_hours || 8,
+      sessions: a.sessions || 0,
+      hours_worked: Math.round((a.hours_worked || 0) * 100) / 100,
+      open_sessions: a.open_sessions || 0,
+      personal_tasks: { done:t.done||0, in_progress:t.in_progress||0, pending:t.pending||0, total:t.total||0, time_spent_sec:t.total_sec||0 },
+      team_tasks: { done: ttDone[e.id] || 0, open: ttOpen[e.id] || 0 },
+      recent_done: recentMap[e.id] || []
+    };
+  });
+
+  // Aggregate by team
+  const teamsAgg = {};
+  for (const e of employees) {
+    const k = e.team || '(No team)';
+    if (!teamsAgg[k]) teamsAgg[k] = { name:k, employees:0, hours_worked:0, personal_done:0, personal_pending:0, personal_in_progress:0, team_done:0, team_open:0, time_spent_sec:0 };
+    const g = teamsAgg[k];
+    g.employees += 1;
+    g.hours_worked += e.hours_worked;
+    g.personal_done += e.personal_tasks.done;
+    g.personal_in_progress += e.personal_tasks.in_progress;
+    g.personal_pending += e.personal_tasks.pending;
+    g.time_spent_sec += e.personal_tasks.time_spent_sec;
+    g.team_done += e.team_tasks.done;
+    g.team_open += e.team_tasks.open;
+  }
+  const teams = Object.values(teamsAgg).map(t => ({ ...t, hours_worked: Math.round(t.hours_worked*100)/100 })).sort((a,b)=>a.name.localeCompare(b.name));
+
+  // Company totals
+  const totals = {
+    employees: employees.length,
+    teams: teams.length,
+    hours_worked: Math.round(employees.reduce((s,e)=>s+e.hours_worked,0)*100)/100,
+    personal_done: employees.reduce((s,e)=>s+e.personal_tasks.done,0),
+    personal_pending: employees.reduce((s,e)=>s+e.personal_tasks.pending,0),
+    personal_in_progress: employees.reduce((s,e)=>s+e.personal_tasks.in_progress,0),
+    team_done: employees.reduce((s,e)=>s+e.team_tasks.done,0),
+    team_open: employees.reduce((s,e)=>s+e.team_tasks.open,0)
+  };
+
+  res.json({ from, to, team: teamFilter, totals, teams, employees });
+});
+
 initDb().then(() => app.listen(PORT, () => console.log(`HR System on port ${PORT}`)));
