@@ -1097,16 +1097,43 @@ async function loadToolsTopbar(){
   const bar = document.getElementById(isAdmin ? 'admin-tools-bar' : 'emp-tools-bar');
   if(!bar) return;
   if(!tools.length){ bar.innerHTML = '<span class="tools-empty">No tools yet'+(isAdmin?' — add some from the Tools page':'')+'</span>'; return; }
+  // Cache the visible tools so we can read URL/name later when the user clicks "Open"
+  window._toolsCache = {};
   bar.innerHTML = tools.map(t => {
+    window._toolsCache[t.id] = t;
     let iconHtml;
     if (/^https?:\/\//i.test(t.icon || '')) iconHtml = `<img src="${esc(t.icon)}" alt="">`;
     else if (t.icon) iconHtml = esc(t.icon);
     else iconHtml = esc((t.name||'?')[0].toUpperCase());
-    const hasCred = isAdmin && (t.username || t.has_password);
+    const hasCred = (t.username || t.has_password);
     const badge = hasCred ? '<span style="position:absolute;top:-4px;right:-4px;background:var(--gold-soft);color:#0a0a0c;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;" title="Credentials saved">🔑</span>' : '';
-    const tipText = t.name + (hasCred ? ' (has credentials)' : '');
+    const tipText = t.name + (hasCred ? ' (click to view login)' : '');
+    if (hasCred) {
+      // Tools WITH credentials open the credentials popup instead of going straight to the URL
+      return `<a class="tool-icon" href="javascript:void(0)" onclick="openToolWithCreds(${t.id})">${iconHtml}${badge}<span class="tool-tip">${esc(tipText)}</span></a>`;
+    }
+    // Tools without credentials just open the URL
     return `<a class="tool-icon" href="${esc(t.url)}" target="_blank" rel="noopener">${iconHtml}${badge}<span class="tool-tip">${esc(tipText)}</span></a>`;
   }).join('');
+}
+
+async function openToolWithCreds(id){
+  const t = window._toolsCache ? window._toolsCache[id] : null;
+  if(!t){ alert('Tool not found'); return; }
+  const r = await api('/api/tools/'+id+'/credentials');
+  if(r?.error){ alert(r.error); return; }
+  // Open the tool's URL in a new tab so they can paste right away
+  try { window.open(t.url, '_blank', 'noopener'); } catch(e){}
+  // Then show credentials modal (already wired) — reuse it
+  document.getElementById('tc-name').textContent = t.name + ' — Login';
+  document.getElementById('tc-user').value = r.username || '';
+  document.getElementById('tc-pass').value = r.password || '';
+  document.getElementById('tc-pass').type = 'password';
+  document.getElementById('tc-eye').textContent = 'Show';
+  const empty = !r.username && !r.password;
+  document.getElementById('tc-empty').classList.toggle('hidden', !empty);
+  document.getElementById('tc-fields').style.display = empty ? 'none' : 'block';
+  document.getElementById('modal-tool-creds').classList.remove('hidden');
 }
 
 // Render team checkbox group inside a container, based on the cached teamsList

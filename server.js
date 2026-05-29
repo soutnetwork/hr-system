@@ -483,9 +483,17 @@ app.get('/api/tools', authenticate, (req, res) => {
   })));
 });
 // Reveal password (admin only) — separate endpoint so it's an explicit action
-app.get('/api/tools/:id/credentials', authenticate, requireAdmin, (req, res) => {
-  const t = get(`SELECT username, password_enc FROM tools WHERE id=?`, [req.params.id]);
+app.get('/api/tools/:id/credentials', authenticate, (req, res) => {
+  const t = get(`SELECT username, password_enc, teams_csv FROM tools WHERE id=?`, [req.params.id]);
   if (!t) return res.status(404).json({ error: 'Not found' });
+  // Admin always allowed; employees only if the tool is visible to their team
+  if (req.user.role !== 'admin') {
+    const me = get('SELECT team FROM users WHERE id=?', [req.user.id]);
+    const myTeam = (me?.team || '').toLowerCase();
+    const list = toolsCsvToArray(t.teams_csv || '');
+    const allowed = list.length === 0 || list.some(x => x.toLowerCase() === myTeam);
+    if (!allowed) return res.status(403).json({ error: 'Not allowed' });
+  }
   res.json({ username: t.username || '', password: decryptPwd(t.password_enc || '') });
 });
 app.post('/api/tools', authenticate, requireAdmin, (req, res) => {
