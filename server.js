@@ -66,7 +66,13 @@ async function initDb() {
     );
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
-      message TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      message TEXT NOT NULL, room_id INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+      team TEXT DEFAULT '', is_company INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
   // migrations for older DBs
@@ -77,6 +83,15 @@ async function initDb() {
   try { db.run(`ALTER TABLE users ADD COLUMN is_lead INTEGER DEFAULT 0`); } catch(e){}
   try { db.run(`ALTER TABLE team_tasks ADD COLUMN team TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''`); } catch(e){}
+  try { db.run(`ALTER TABLE chat_messages ADD COLUMN room_id INTEGER DEFAULT 0`); } catch(e){}
+
+  // ensure a default Company room exists (id=1)
+  if (!get(`SELECT id FROM chat_rooms WHERE is_company=1`)) {
+    run(`INSERT INTO chat_rooms (name, team, is_company) VALUES ('Company', '', 1)`);
+    // migrate any pre-existing messages (room_id=0) into the company room
+    const company = get(`SELECT id FROM chat_rooms WHERE is_company=1`);
+    if (company) run(`UPDATE chat_messages SET room_id=? WHERE room_id=0 OR room_id IS NULL`, [company.id]);
+  }
 
   if (!get('SELECT id FROM users WHERE username = ?', ['admin'])) {
     const hash = bcrypt.hashSync('admin123', 10);
@@ -281,14 +296,69 @@ app.put('/api/schedule', authenticate, requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// ===== TEAM CHAT =====
-app.get('/api/chat', authenticate, (req, res) => {
-  res.json(all(`SELECT c.id, c.message, c.created_at, u.full_name FROM chat_messages c JOIN users u ON c.user_id=u.id ORDER BY c.id DESC LIMIT 100`).reverse());
+// ===== CHAT ROOMS & MESSAGES =====
+// Helper: can current user access this room?
+function canAccessRoom(user, room) {
+  if (!room) return false;
+  if (user.role === 'admin') return true;
+  if (room.is_company) return true;
+  if (!room.team) return true; // a general room with no team restriction
+  return (user.team || '') === room.team;
+}
+
+// List rooms the current user can see
+app.get('/api/chat-rooms', authenticate, (req, res) => {
+  const me = get('SELECT team FROM users WHERE id=?', [req.user.id]);
+  const team = me?.team || '';
+  let rooms;
+  if (req.user.role === 'admin') {
+    rooms = all(`SELECT id, name, team, is_company FROM chat_rooms ORDER BY is_company DESC, name`);
+  } else {
+    rooms = all(`SELECT id, name, team, is_company FROM chat_rooms WHERE is_company=1 OR team='' OR team=? ORDER BY is_company DESC, name`, [team]);
+  }
+  res.json(rooms);
 });
+
+// Admin creates a new chat room (e.g., per team)
+app.post('/api/chat-rooms', authenticate, requireAdmin, (req, res) => {
+  const { name, team } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
+  const r = runReturn(`INSERT INTO chat_rooms (name, team, is_company) VALUES (?,?,0)`, [name.trim(), team || '']);
+  res.json({ success: true, id: r.lastInsertRowid });
+});
+
+// Admin can delete a non-company room (and its messages)
+app.delete('/api/chat-rooms/:id', authenticate, requireAdmin, (req, res) => {
+  const room = get('SELECT * FROM chat_rooms WHERE id=?', [req.params.id]);
+  if (!room) return res.status(404).json({ error: 'Not found' });
+  if (room.is_company) return res.status(400).json({ error: 'Cannot delete the company room' });
+  run(`DELETE FROM chat_messages WHERE room_id=?`, [req.params.id]);
+  run(`DELETE FROM chat_rooms WHERE id=?`, [req.params.id]);
+  res.json({ success: true });
+});
+
+// Get messages of a specific room (with sender info)
+app.get('/api/chat', authenticate, (req, res) => {
+  const room_id = parseInt(req.query.room_id, 10);
+  if (!room_id) return res.status(400).json({ error: 'room_id required' });
+  const room = get('SELECT * FROM chat_rooms WHERE id=?', [room_id]);
+  if (!canAccessRoom(req.user, room)) return res.status(403).json({ error: 'Not allowed' });
+  const msgs = all(`
+    SELECT c.id, c.message, c.created_at, c.user_id,
+           u.full_name, u.job_title, u.avatar
+    FROM chat_messages c JOIN users u ON c.user_id=u.id
+    WHERE c.room_id=? ORDER BY c.id DESC LIMIT 200`, [room_id]).reverse();
+  res.json(msgs);
+});
+
+// Post a message into a room
 app.post('/api/chat', authenticate, (req, res) => {
-  const { message } = req.body;
+  const { message, room_id } = req.body;
   if (!message || !message.trim()) return res.status(400).json({ error: 'Empty message' });
-  runReturn(`INSERT INTO chat_messages (user_id, message) VALUES (?,?)`, [req.user.id, message.trim()]);
+  if (!room_id) return res.status(400).json({ error: 'room_id required' });
+  const room = get('SELECT * FROM chat_rooms WHERE id=?', [room_id]);
+  if (!canAccessRoom(req.user, room)) return res.status(403).json({ error: 'Not allowed' });
+  runReturn(`INSERT INTO chat_messages (user_id, message, room_id) VALUES (?,?,?)`, [req.user.id, message.trim(), room_id]);
   res.json({ success: true });
 });
 
@@ -312,10 +382,17 @@ app.post('/api/admin/employees', authenticate, requireAdmin, (req, res) => {
 });
 // edit employee team/lead
 app.patch('/api/admin/employees/:id', authenticate, requireAdmin, (req, res) => {
-  const { team, is_lead, daily_hours } = req.body;
+  const { team, is_lead, daily_hours, full_name, job_title, new_password } = req.body;
+  if (full_name !== undefined && full_name.trim()) run(`UPDATE users SET full_name=? WHERE id=?`, [full_name.trim(), req.params.id]);
+  if (job_title !== undefined) run(`UPDATE users SET job_title=? WHERE id=?`, [job_title, req.params.id]);
   if (team !== undefined) run(`UPDATE users SET team=? WHERE id=?`, [team, req.params.id]);
   if (is_lead !== undefined) run(`UPDATE users SET is_lead=? WHERE id=?`, [is_lead ? 1 : 0, req.params.id]);
   if (daily_hours !== undefined) run(`UPDATE users SET daily_hours=? WHERE id=?`, [daily_hours, req.params.id]);
+  if (new_password) {
+    if (new_password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const hash = bcrypt.hashSync(new_password, 10);
+    run(`UPDATE users SET password_hash=? WHERE id=?`, [hash, req.params.id]);
+  }
   res.json({ success: true });
 });
 app.delete('/api/admin/employees/:id', authenticate, requireAdmin, (req, res) => {
