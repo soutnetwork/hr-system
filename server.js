@@ -723,10 +723,26 @@ app.delete('/api/admin/employees/:id', authenticate, requireAdmin, (req, res) =>
   res.json({ success: true });
 });
 app.post('/api/admin/tasks', authenticate, requireAdmin, (req, res) => {
-  const { user_id, title, description } = req.body;
-  if (!user_id || !title) return res.status(400).json({ error: 'Missing data' });
-  const r = runReturn(`INSERT INTO tasks (user_id, title, description) VALUES (?,?,?)`, [user_id, title, description || '']);
-  res.json({ success: true, id: r.lastInsertRowid });
+  const { user_id, user_ids, team, title, description } = req.body;
+  if (!title) return res.status(400).json({ error: 'Title is required' });
+
+  // Build the list of target user IDs from any of: user_id, user_ids[], team
+  const targets = new Set();
+  if (user_id) targets.add(parseInt(user_id, 10));
+  if (Array.isArray(user_ids)) for (const u of user_ids) { const n = parseInt(u, 10); if (n) targets.add(n); }
+  if (team) {
+    const members = all(`SELECT id FROM users WHERE role='employee' AND team=?`, [team]);
+    for (const m of members) targets.add(m.id);
+  }
+  if (targets.size === 0) return res.status(400).json({ error: 'Pick at least one employee or a team' });
+
+  // Insert one row per target so each person can track their own progress
+  const ids = [];
+  for (const uid of targets) {
+    const r = runReturn(`INSERT INTO tasks (user_id, title, description) VALUES (?,?,?)`, [uid, title, description || '']);
+    ids.push(r.lastInsertRowid);
+  }
+  res.json({ success: true, count: ids.length, ids });
 });
 app.delete('/api/admin/tasks/:id', authenticate, requireAdmin, (req, res) => {
   run('DELETE FROM tasks WHERE id=?', [req.params.id]); res.json({ success: true });

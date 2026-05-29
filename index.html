@@ -523,10 +523,20 @@
     <div id="admin-tab-ptasks" class="hidden">
       <div class="card">
         <h3>Assign Personal Task</h3>
-        <label>Employee</label><select id="task-user-select"></select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label>Assign to Team <span style="color:var(--muted);font-weight:400;font-size:11px;">(everyone in the team)</span></label>
+            <select id="task-team-select" data-team-options="1" data-team-empty="-- No team --" style="margin:0;"></select>
+          </div>
+          <div>
+            <label>Or Pick Specific Employees <span style="color:var(--muted);font-weight:400;font-size:11px;">(Ctrl-click to pick more than one)</span></label>
+            <select id="task-user-select" multiple size="4" style="margin:0;height:auto;"></select>
+          </div>
+        </div>
         <label>Task Title</label><input id="task-title" type="text" placeholder="e.g. Upload tracks for album X">
         <label>Description (optional)</label><textarea id="task-desc" rows="3"></textarea>
-        <button onclick="addTask()">Add Task</button>
+        <button onclick="addTask()">Assign Task</button>
+        <p style="font-size:11px;color:var(--muted);margin-top:6px;">Tip: pick a team OR specific people (or both). The task is created for each person — they each track their own progress.</p>
       </div>
       <div class="card"><h3>View Employee Tasks</h3><select id="task-view-select" onchange="loadEmpTasks()"></select><div id="admin-tasks-list" style="margin-top:14px;"></div></div>
     </div>
@@ -1254,7 +1264,7 @@ async function loadAdminEmployees(){
   document.getElementById('stat-tasks').textContent=emps.reduce((a,e)=>a+(e.tasks_done_today||0),0);
   const tb=document.getElementById('admin-employees-table');
   tb.innerHTML=emps.map(e=>{const s=e.is_online?'online':'offline',st=e.is_online?'Online':'Offline',t=e.clock_in?new Date(e.clock_in+'Z').toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—';let ht='—';if(e.is_online&&e.clock_in){ht=((Date.now()-new Date(e.clock_in+'Z').getTime())/3600000).toFixed(1)+'h';}const teamCell=e.team?`${esc(e.team)}${e.is_lead?' <span class="pri pri-normal">LEAD</span>':''}`:'<span style="color:var(--muted);">—</span>';return `<tr><td style="font-weight:600;">${esc(e.full_name)}</td><td style="font-size:12px;">${teamCell}</td><td style="color:var(--muted);">${esc(e.job_title||'—')}</td><td><span class="status-badge status-${s}"><span class="dot dot-${s}"></span>${st}</span></td><td>${t}</td><td>${ht}</td><td>${e.daily_hours||8}h</td><td>${e.tasks_done_today}</td><td style="white-space:nowrap;"><button class="secondary" style="padding:6px 12px;font-size:12px;width:auto;margin:0 4px 0 0;" onclick="openEditEmp(${e.id})">Edit</button><button class="danger" style="padding:6px 12px;font-size:12px;width:auto;margin:0;" onclick="deleteEmployee(${e.id},'${esc(e.full_name)}')">Delete</button></td></tr>`;}).join('')||'<tr><td colspan="9" style="text-align:center;color:#66635a;padding:20px;">No employees yet</td></tr>';
-  ['task-user-select','task-view-select','report-user-select','tt-assignee'].forEach(id=>{const sel=document.getElementById(id);if(sel){const ph=id==='tt-assignee'?'Unassigned':'Select employee...';sel.innerHTML=`<option value="">${ph}</option>`+emps.map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');}});
+  ['task-user-select','task-view-select','report-user-select','tt-assignee'].forEach(id=>{const sel=document.getElementById(id);if(sel){const isMulti=sel.multiple;const ph=id==='tt-assignee'?'Unassigned':'Select employee...';sel.innerHTML=(isMulti?'':`<option value="">${ph}</option>`)+emps.map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');}});
 }
 function showAddEmployee(){document.getElementById('modal-add-employee').classList.remove('hidden');}
 function hideModal(id){document.getElementById(id).classList.add('hidden');}
@@ -1300,12 +1310,22 @@ async function saveEditEmp(){
 
 async function deleteEmployee(id,name){if(!confirm('Delete '+name+'?'))return;await api('/api/admin/employees/'+id,{method:'DELETE'});loadAdminEmployees();}
 async function addTask(){
-  const u=document.getElementById('task-user-select').value,t=document.getElementById('task-title').value,d=document.getElementById('task-desc').value;
-  if(!u||!t){alert('Please select an employee and enter a title');return;}
-  const r=await api('/api/admin/tasks',{method:'POST',body:JSON.stringify({user_id:u,title:t,description:d})});
-  if(r?.error){alert(r.error);return;}
-  document.getElementById('task-title').value='';document.getElementById('task-desc').value='';alert('Task added');
-  if(document.getElementById('task-view-select').value===u)loadEmpTasks();
+  const title = document.getElementById('task-title').value.trim();
+  const description = document.getElementById('task-desc').value;
+  const teamSel = document.getElementById('task-team-select');
+  const userSel = document.getElementById('task-user-select');
+  const team = teamSel ? teamSel.value : '';
+  const user_ids = userSel ? Array.from(userSel.selectedOptions).map(o => o.value).filter(v => v) : [];
+  if(!title){ alert('Please enter a task title'); return; }
+  if(!team && !user_ids.length){ alert('Pick a team or at least one employee'); return; }
+  const r = await api('/api/admin/tasks', { method:'POST', body: JSON.stringify({ user_ids, team, title, description }) });
+  if(r?.error){ alert(r.error); return; }
+  document.getElementById('task-title').value = '';
+  document.getElementById('task-desc').value = '';
+  if(userSel) Array.from(userSel.options).forEach(o => o.selected = false);
+  if(teamSel) teamSel.value = '';
+  alert('Task assigned to ' + r.count + ' employee' + (r.count===1?'':'s'));
+  loadEmpTasks();
 }
 async function loadEmpTasks(){
   const u=document.getElementById('task-view-select').value;if(!u){document.getElementById('admin-tasks-list').innerHTML='';return;}
