@@ -74,6 +74,10 @@ async function initDb() {
       team TEXT DEFAULT '', is_company INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS chat_mutes (
+      room_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+      PRIMARY KEY (room_id, user_id)
+    );
   `);
   // migrations for older DBs
   try { db.run(`ALTER TABLE users ADD COLUMN daily_hours INTEGER DEFAULT 8`); } catch(e){}
@@ -269,6 +273,7 @@ app.get('/api/teammates', authenticate, (req, res) => {
 
 // ===== SHIFT TIME SETTINGS =====
 const DEFAULT_SHIFTS = JSON.stringify({ Morning: '09:00 - 17:00', Mid: '13:00 - 21:00', Night: '21:00 - 05:00' });
+const DEFAULT_COLORS = JSON.stringify({ Morning: '#5fb878', Mid: '#6b8cce', Night: '#9b78ce', Off: '#d6584f' });
 app.get('/api/shift-settings', authenticate, (req, res) => {
   const row = get(`SELECT value FROM settings WHERE key='shifts'`);
   res.json(JSON.parse(row?.value || DEFAULT_SHIFTS));
@@ -278,6 +283,18 @@ app.put('/api/shift-settings', authenticate, requireAdmin, (req, res) => {
   const val = JSON.stringify({ Morning: Morning || '', Mid: Mid || '', Night: Night || '' });
   if (get(`SELECT key FROM settings WHERE key='shifts'`)) run(`UPDATE settings SET value=? WHERE key='shifts'`, [val]);
   else run(`INSERT INTO settings (key, value) VALUES ('shifts', ?)`, [val]);
+  res.json({ success: true });
+});
+app.get('/api/shift-colors', authenticate, (req, res) => {
+  const row = get(`SELECT value FROM settings WHERE key='shift_colors'`);
+  res.json(JSON.parse(row?.value || DEFAULT_COLORS));
+});
+app.put('/api/shift-colors', authenticate, requireAdmin, (req, res) => {
+  const { Morning, Mid, Night, Off } = req.body;
+  const def = JSON.parse(DEFAULT_COLORS);
+  const val = JSON.stringify({ Morning: Morning || def.Morning, Mid: Mid || def.Mid, Night: Night || def.Night, Off: Off || def.Off });
+  if (get(`SELECT key FROM settings WHERE key='shift_colors'`)) run(`UPDATE settings SET value=? WHERE key='shift_colors'`, [val]);
+  else run(`INSERT INTO settings (key, value) VALUES ('shift_colors', ?)`, [val]);
   res.json({ success: true });
 });
 
@@ -358,8 +375,54 @@ app.post('/api/chat', authenticate, (req, res) => {
   if (!room_id) return res.status(400).json({ error: 'room_id required' });
   const room = get('SELECT * FROM chat_rooms WHERE id=?', [room_id]);
   if (!canAccessRoom(req.user, room)) return res.status(403).json({ error: 'Not allowed' });
+  // Muted users can't send (admin is never muted)
+  if (req.user.role !== 'admin') {
+    const muted = get('SELECT 1 AS m FROM chat_mutes WHERE room_id=? AND user_id=?', [room_id, req.user.id]);
+    if (muted) return res.status(403).json({ error: 'You are muted in this chat' });
+  }
   runReturn(`INSERT INTO chat_messages (user_id, message, room_id) VALUES (?,?,?)`, [req.user.id, message.trim(), room_id]);
   res.json({ success: true });
+});
+
+// List members of a room (users who can access it) + their mute status
+app.get('/api/chat-rooms/:id/members', authenticate, requireAdmin, (req, res) => {
+  const room = get('SELECT * FROM chat_rooms WHERE id=?', [req.params.id]);
+  if (!room) return res.status(404).json({ error: 'Not found' });
+  let users;
+  if (room.is_company || !room.team) {
+    users = all(`SELECT id, full_name, job_title, team, avatar FROM users WHERE role='employee' ORDER BY full_name`);
+  } else {
+    users = all(`SELECT id, full_name, job_title, team, avatar FROM users WHERE role='employee' AND team=? ORDER BY full_name`, [room.team]);
+  }
+  const muted = new Set(all('SELECT user_id FROM chat_mutes WHERE room_id=?', [req.params.id]).map(r => r.user_id));
+  res.json(users.map(u => ({ ...u, muted: muted.has(u.id) })));
+});
+
+// Mute / unmute a user in a room
+app.post('/api/chat-rooms/:id/mute', authenticate, requireAdmin, (req, res) => {
+  const { user_id, muted } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id required' });
+  if (muted) {
+    if (!get('SELECT 1 AS m FROM chat_mutes WHERE room_id=? AND user_id=?', [req.params.id, user_id])) {
+      run('INSERT INTO chat_mutes (room_id, user_id) VALUES (?,?)', [req.params.id, user_id]);
+    }
+  } else {
+    run('DELETE FROM chat_mutes WHERE room_id=? AND user_id=?', [req.params.id, user_id]);
+  }
+  res.json({ success: true });
+});
+
+// Useful: list of mentionable users for the current room (filtered by team scope)
+app.get('/api/chat-rooms/:id/mentionable', authenticate, (req, res) => {
+  const room = get('SELECT * FROM chat_rooms WHERE id=?', [req.params.id]);
+  if (!canAccessRoom(req.user, room)) return res.status(403).json({ error: 'Not allowed' });
+  let users;
+  if (room.is_company || !room.team) {
+    users = all(`SELECT id, full_name, job_title FROM users WHERE role='employee' OR role='admin' ORDER BY full_name`);
+  } else {
+    users = all(`SELECT id, full_name, job_title FROM users WHERE (role='employee' AND team=?) OR role='admin' ORDER BY full_name`, [room.team]);
+  }
+  res.json(users);
 });
 
 // ===== ADMIN =====

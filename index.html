@@ -151,6 +151,15 @@
   .chat-input-row button { width: auto; padding: 0 22px; margin: 0; }
   @media (max-width:700px){ .chat-shell{grid-template-columns:1fr;} .chat-sidebar{min-height:auto;border-right:none;border-bottom:1px solid var(--border);} }
 
+  /* @Mentions */
+  .mention-pop { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.5); padding: 6px; z-index: 200; max-height: 220px; overflow-y: auto; min-width: 220px; }
+  .mention-item { padding: 8px 10px; border-radius: 7px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 9px; }
+  .mention-item:hover, .mention-item.active { background: var(--panel2); }
+  .mention-item .avatar { width: 26px; height: 26px; font-size: 11px; }
+  .mention-item .mi-name { font-weight: 600; color: var(--text); }
+  .mention-item .mi-job { font-size: 11px; color: var(--muted); }
+  .mention-tag { color: var(--gold-soft); font-weight: 600; background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; }
+
   /* Schedule */
   .sched-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   .sched-toolbar button { width: auto; padding: 9px 16px; margin: 0; }
@@ -167,10 +176,15 @@
   .paint-btn { width: auto !important; margin: 0 !important; padding: 7px 12px !important; font-size: 12px !important; background: var(--panel) !important; color: var(--text) !important; border: 1px solid var(--border) !important; font-weight: 600 !important; }
   .paint-btn:hover { background: var(--panel2) !important; }
   .paint-btn.active { background: var(--gold-soft) !important; color: #0a0a0c !important; border-color: var(--gold-soft) !important; }
-  .sh-Morning { background: rgba(95,184,120,.22); color: #8fd4a3; }
-  .sh-Mid { background: rgba(107,140,206,.22); color: #9bb3e0; }
-  .sh-Night { background: rgba(155,120,206,.22); color: #c0a3e0; }
-  .sh-Off { background: rgba(214,88,79,.18); color: #e89089; }
+  :root { --c-Morning:#5fb878; --c-Mid:#6b8cce; --c-Night:#9b78ce; --c-Off:#d6584f; }
+  .sh-Morning { background: color-mix(in srgb, var(--c-Morning) 22%, transparent); color: color-mix(in srgb, var(--c-Morning) 75%, white); }
+  .sh-Mid { background: color-mix(in srgb, var(--c-Mid) 22%, transparent); color: color-mix(in srgb, var(--c-Mid) 75%, white); }
+  .sh-Night { background: color-mix(in srgb, var(--c-Night) 22%, transparent); color: color-mix(in srgb, var(--c-Night) 75%, white); }
+  .sh-Off { background: color-mix(in srgb, var(--c-Off) 18%, transparent); color: color-mix(in srgb, var(--c-Off) 75%, white); }
+  .legend-Morning { background: var(--c-Morning) !important; }
+  .legend-Mid { background: var(--c-Mid) !important; }
+  .legend-Night { background: var(--c-Night) !important; }
+  .legend-Off { background: var(--c-Off) !important; }
   .sh-empty { background: transparent; color: #44444c; }
   .sched-weekend { background: rgba(255,255,255,.02); }
   .sched-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; }
@@ -278,10 +292,10 @@
         </div>
         <div class="sched-wrap"><table class="sched-table" id="esched-table"></table></div>
         <div class="sched-legend">
-          <span><i class="sh-Morning"></i>Morning <b id="el-morning" style="color:var(--text);margin-left:4px;"></b></span>
-          <span><i class="sh-Mid"></i>Mid <b id="el-mid" style="color:var(--text);margin-left:4px;"></b></span>
-          <span><i class="sh-Night"></i>Night <b id="el-night" style="color:var(--text);margin-left:4px;"></b></span>
-          <span><i class="sh-Off"></i>Week-End</span>
+          <span><i class="legend-Morning"></i>Morning <b id="el-morning" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="legend-Mid"></i>Mid <b id="el-mid" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="legend-Night"></i>Night <b id="el-night" style="color:var(--text);margin-left:4px;"></b></span>
+          <span><i class="legend-Off"></i>Week-End</span>
         </div>
       </div>
     </div>
@@ -389,6 +403,16 @@
         <button onclick="saveShifts()" style="margin-top:4px;">Save Shift Times</button>
       </div>
       <div class="card">
+        <h3>Shift Colors <span style="font-size:11px;color:var(--muted);">(pick a color for each shift)</span></h3>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end;">
+          <div><label>Morning</label><input id="color-morning" type="color" style="height:42px;padding:4px;cursor:pointer;"></div>
+          <div><label>Mid</label><input id="color-mid" type="color" style="height:42px;padding:4px;cursor:pointer;"></div>
+          <div><label>Night</label><input id="color-night" type="color" style="height:42px;padding:4px;cursor:pointer;"></div>
+          <div><label>Week-End</label><input id="color-off" type="color" style="height:42px;padding:4px;cursor:pointer;"></div>
+        </div>
+        <button onclick="saveShiftColors()" style="margin-top:4px;">Save Colors</button>
+      </div>
+      <div class="card">
         <div class="sched-toolbar">
           <button class="secondary" onclick="schedPrev('a')">‹ Prev</button>
           <span class="sched-month" id="asched-month"></span>
@@ -405,10 +429,10 @@
         </div>
         <div class="sched-wrap"><table class="sched-table" id="asched-table"></table></div>
         <div class="sched-legend">
-          <span><i class="sh-Morning"></i>Morning</span>
-          <span><i class="sh-Mid"></i>Mid</span>
-          <span><i class="sh-Night"></i>Night</span>
-          <span><i class="sh-Off"></i>Week-End</span>
+          <span><i class="legend-Morning"></i>Morning</span>
+          <span><i class="legend-Mid"></i>Mid</span>
+          <span><i class="legend-Night"></i>Night</span>
+          <span><i class="legend-Off"></i>Week-End</span>
           <span><i style="background:var(--gold-soft);"></i>Has note</span>
         </div>
       </div>
@@ -429,7 +453,7 @@
           <div id="admin-rooms-list"></div>
         </div>
         <div class="chat-main">
-          <div class="chat-main-header"><h3 id="admin-room-title" style="margin:0;">Select a chat</h3><span id="admin-room-sub" style="font-size:11px;color:var(--muted);"></span></div>
+          <div class="chat-main-header"><div><h3 id="admin-room-title" style="margin:0;">Select a chat</h3><span id="admin-room-sub" style="font-size:11px;color:var(--muted);"></span></div><button class="secondary" id="admin-room-members-btn" onclick="openRoomMembers()" style="width:auto;padding:7px 13px;margin:0;font-size:12px;" disabled>Members</button></div>
           <div class="chat-box" id="admin-chat-box"><p style="color:var(--muted);font-size:13px;text-align:center;padding:20px;">Pick a chat from the left to start</p></div>
           <div class="chat-input-row"><input id="admin-chat-input" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChat('admin')" disabled><button onclick="sendChat('admin')" id="admin-chat-send" disabled>Send</button></div>
         </div>
@@ -476,6 +500,21 @@
     <div class="btn-row"><button class="secondary" onclick="hideModal('modal-add-employee')">Cancel</button><button onclick="createEmployee()">Add Employee</button></div>
   </div>
 </div>
+
+<!-- Room Members Modal (admin only) -->
+<div id="modal-room-members" class="modal-bg hidden">
+  <div class="modal" style="max-width:480px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;">
+      <h3 style="margin:0;">Chat Members</h3>
+      <button class="secondary" style="width:auto;padding:6px 12px;margin:0;font-size:12px;" onclick="hideModal('modal-room-members')">Close</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Toggle Mute to stop a member from sending messages in this chat. They can still read.</p>
+    <div id="room-members-list" style="max-height:380px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- Mention suggestion dropdown (shared, positioned dynamically) -->
+<div id="mention-pop" class="mention-pop hidden"></div>
 
 <!-- Edit Employee Modal -->
 <div id="modal-edit-employee" class="modal-bg hidden">
@@ -595,6 +634,12 @@ function showDashboard(){
   document.getElementById('login-page').classList.add('hidden');
   if(currentUser.role==='admin'){ document.getElementById('admin-page').classList.remove('hidden'); loadAdminEmployees(); setInterval(loadAdminEmployees,15000); }
   else { document.getElementById('employee-page').classList.remove('hidden'); document.getElementById('emp-name').textContent=currentUser.full_name; loadEmpStatus(); loadEmpTasksOwn(); loadEmpAttendance(); setInterval(loadEmpStatus,30000); }
+  // Wire up @mention behavior on chat inputs and task comment input
+  const empInp=document.getElementById('emp-chat-input'); if(empInp && !empInp._mentionsAttached){ attachMention(empInp, ()=>'chat:'+(activeRooms.emp||0)); empInp._mentionsAttached=true; }
+  const adInp=document.getElementById('admin-chat-input'); if(adInp && !adInp._mentionsAttached){ attachMention(adInp, ()=>'chat:'+(activeRooms.admin||0)); adInp._mentionsAttached=true; }
+  const tdInp=document.getElementById('td-comment-input'); if(tdInp && !tdInp._mentionsAttached){ attachMention(tdInp, ()=>'task'); tdInp._mentionsAttached=true; }
+  // Load shift colors so the schedule looks right everywhere
+  api('/api/shift-colors').then(c=>{ if(c) applyShiftColors(c); });
 }
 
 function fmt(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
@@ -828,7 +873,7 @@ async function openTeamTask(id,who){
 async function loadComments(id){
   const c=await api('/api/team-tasks/'+id+'/comments'); if(!c)return;
   const box=document.getElementById('td-comments');
-  box.innerHTML=c.map(m=>{const tm=new Date(m.created_at+'Z').toLocaleString('en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});return `<div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--gold-soft);margin-bottom:2px;">${esc(m.full_name)} <span style="color:var(--muted);">· ${tm}</span></div><div style="font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;">${linkify(m.comment)}</div></div>`;}).join('')||'<p style="color:var(--muted);font-size:12px;">No replies yet. Be the first.</p>';
+  box.innerHTML=c.map(m=>{const tm=new Date(m.created_at+'Z').toLocaleString('en-US',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});return `<div style="margin-bottom:10px;"><div style="font-size:11px;color:var(--gold-soft);margin-bottom:2px;">${esc(m.full_name)} <span style="color:var(--muted);">· ${tm}</span></div><div style="font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;">${renderMentions(linkify(m.comment))}</div></div>`;}).join('')||'<p style="color:var(--muted);font-size:12px;">No replies yet. Be the first.</p>';
   box.scrollTop=box.scrollHeight;
 }
 async function sendComment(){
@@ -857,10 +902,12 @@ async function loadRooms(who){
 
 function openRoom(id, name, tag, who){
   activeRooms[who] = id;
+  clearMentionCache();
   document.getElementById(who+'-room-title').textContent = name;
   document.getElementById(who+'-room-sub').textContent = tag;
   document.getElementById(who+'-chat-input').disabled = false;
   document.getElementById(who+'-chat-send').disabled = false;
+  if(who==='admin'){ const mb=document.getElementById('admin-room-members-btn'); if(mb) mb.disabled = false; }
   document.querySelectorAll('#'+who+'-rooms-list .chat-room-item').forEach(el=>el.classList.remove('active'));
   // (re-render of sidebar happens on next loadRooms anyway)
   loadChat(who); loadRooms(who);
@@ -877,7 +924,7 @@ async function loadChat(who){
     const tm = new Date(m.created_at+'Z').toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
     const avBox = m.avatar ? `<div class="avatar"><img src="${esc(m.avatar)}" alt=""></div>` : `<div class="avatar">${esc(initials(m.full_name))}</div>`;
     const job = m.job_title ? `<span class="job">${esc(m.job_title)}</span>` : '';
-    return `<div class="chat-msg ${mine?'mine':''}">${avBox}<div class="chat-msg-content"><div class="chat-meta"><b>${esc(m.full_name)}</b>${job}<span>· ${tm}</span></div><div class="chat-bubble">${linkify(m.message)}</div></div></div>`;
+    return `<div class="chat-msg ${mine?'mine':''}">${avBox}<div class="chat-msg-content"><div class="chat-meta"><b>${esc(m.full_name)}</b>${job}<span>· ${tm}</span></div><div class="chat-bubble">${renderMentions(linkify(m.message))}</div></div></div>`;
   }).join('');
   if(atBottom) box.scrollTop = box.scrollHeight;
 }
@@ -901,10 +948,38 @@ async function createRoom(){
   alert('Chat created'); loadRooms('admin');
 }
 
+async function openRoomMembers(){
+  const roomId = activeRooms.admin;
+  if(!roomId){ alert('Open a chat first'); return; }
+  const members = await api('/api/chat-rooms/'+roomId+'/members');
+  if(members?.error){ alert(members.error); return; }
+  const box = document.getElementById('room-members-list');
+  if(!members || !members.length){ box.innerHTML = '<p style="color:var(--muted);font-size:12px;">No members yet</p>'; }
+  else {
+    box.innerHTML = members.map(u=>{
+      const av = u.avatar ? `<div class="avatar"><img src="${esc(u.avatar)}" alt=""></div>` : `<div class="avatar">${esc(initials(u.full_name))}</div>`;
+      const status = u.muted ? '<span style="color:var(--red);font-size:11px;font-weight:600;">MUTED</span>' : '<span style="color:var(--green);font-size:11px;font-weight:600;">Active</span>';
+      const btn = u.muted
+        ? `<button class="success" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="toggleMute(${u.id},false)">Unmute</button>`
+        : `<button class="danger" style="width:auto;padding:6px 12px;margin:0;font-size:11px;" onclick="toggleMute(${u.id},true)">Mute</button>`;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid var(--border);">${av}<div style="flex:1;"><div style="font-weight:600;font-size:13px;">${esc(u.full_name)}</div><div style="font-size:11px;color:var(--muted);">${esc(u.job_title||'—')} ${u.team?' · '+esc(u.team):''} · ${status}</div></div>${btn}</div>`;
+    }).join('');
+  }
+  document.getElementById('modal-room-members').classList.remove('hidden');
+}
+
+async function toggleMute(user_id, muted){
+  const roomId = activeRooms.admin;
+  if(!roomId) return;
+  const r = await api('/api/chat-rooms/'+roomId+'/mute', { method:'POST', body: JSON.stringify({ user_id, muted }) });
+  if(r?.error){ alert(r.error); return; }
+  openRoomMembers(); // refresh
+}
+
 async function deleteRoom(id, name, who){
   if(!confirm('Delete chat "'+name+'" and all its messages?')) return;
   await api('/api/chat-rooms/'+id,{method:'DELETE'});
-  if (activeRooms[who]===id){ activeRooms[who]=null; document.getElementById(who+'-chat-box').innerHTML=''; document.getElementById(who+'-room-title').textContent='Select a chat'; document.getElementById(who+'-room-sub').textContent=''; document.getElementById(who+'-chat-input').disabled=true; document.getElementById(who+'-chat-send').disabled=true; }
+  if (activeRooms[who]===id){ activeRooms[who]=null; document.getElementById(who+'-chat-box').innerHTML=''; document.getElementById(who+'-room-title').textContent='Select a chat'; document.getElementById(who+'-room-sub').textContent=''; document.getElementById(who+'-chat-input').disabled=true; document.getElementById(who+'-chat-send').disabled=true; if(who==='admin'){ const mb=document.getElementById('admin-room-members-btn'); if(mb) mb.disabled=true; } }
   loadRooms(who);
 }
 
@@ -994,10 +1069,42 @@ async function saveShifts(){
   alert('Shift times saved'); loadSchedule('a');
 }
 
+async function saveShiftColors(){
+  const body = {
+    Morning: document.getElementById('color-morning').value,
+    Mid: document.getElementById('color-mid').value,
+    Night: document.getElementById('color-night').value,
+    Off: document.getElementById('color-off').value
+  };
+  const r = await api('/api/shift-colors', { method:'PUT', body: JSON.stringify(body) });
+  if(r?.error){ alert(r.error); return; }
+  applyShiftColors(body);
+  alert('Colors saved');
+}
+
+function applyShiftColors(c){
+  if(!c) return;
+  const root = document.documentElement;
+  if(c.Morning) root.style.setProperty('--c-Morning', c.Morning);
+  if(c.Mid) root.style.setProperty('--c-Mid', c.Mid);
+  if(c.Night) root.style.setProperty('--c-Night', c.Night);
+  if(c.Off) root.style.setProperty('--c-Off', c.Off);
+}
+
 async function loadSchedule(who){
   const isAdmin = who==='a';
   // shift times
   const st = await api('/api/shift-settings'); if(st) shiftTimes = st;
+  // shift colors (everyone gets them so the grid looks the same for all)
+  const cl = await api('/api/shift-colors'); if(cl) {
+    applyShiftColors(cl);
+    if(isAdmin){
+      const m=document.getElementById('color-morning'); if(m) m.value=cl.Morning||'#5fb878';
+      const mi=document.getElementById('color-mid'); if(mi) mi.value=cl.Mid||'#6b8cce';
+      const n=document.getElementById('color-night'); if(n) n.value=cl.Night||'#9b78ce';
+      const o=document.getElementById('color-off'); if(o) o.value=cl.Off||'#d6584f';
+    }
+  }
   if(isAdmin){
     document.getElementById('shift-morning').value=shiftTimes.Morning||'';
     document.getElementById('shift-mid').value=shiftTimes.Mid||'';
@@ -1076,6 +1183,105 @@ async function saveCell(){
   const r=await api('/api/schedule',{method:'PUT',body:JSON.stringify({user_id:scCtx.user_id,day:scCtx.day,shift:scCtx.shift,note})});
   if(r?.error){alert(r.error);return;}
   hideModal('modal-sched-cell'); loadSchedule(scCtx.who);
+}
+
+// ===== @MENTIONS =====
+// Cache of mentionable users by context. context = 'chat:roomId' or 'task'
+const mentionCache = {};
+let mentionState = null; // { input, list, index, atPos }
+
+async function getMentionable(context){
+  if(mentionCache[context]) return mentionCache[context];
+  let users;
+  if(context.startsWith('chat:')){
+    const roomId = context.split(':')[1];
+    users = await api('/api/chat-rooms/'+roomId+'/mentionable');
+  } else {
+    users = await api('/api/teammates');
+  }
+  mentionCache[context] = users || [];
+  return mentionCache[context];
+}
+
+function clearMentionCache(){ for(const k in mentionCache) delete mentionCache[k]; }
+
+function attachMention(input, getContext){
+  input.addEventListener('input', async (e)=>{
+    const val = input.value;
+    const pos = input.selectionStart;
+    // find last @ before cursor that starts a word
+    let at = -1;
+    for(let i=pos-1; i>=0; i--){
+      const ch = val[i];
+      if(ch === '@') { at = i; break; }
+      if(ch === ' ' || ch === '\n') break;
+    }
+    if(at < 0 || (at > 0 && /\S/.test(val[at-1]))){ hideMention(); return; }
+    const query = val.slice(at+1, pos).toLowerCase();
+    const users = await getMentionable(getContext());
+    const matches = users.filter(u => u.full_name.toLowerCase().includes(query)).slice(0, 8);
+    if(!matches.length){ hideMention(); return; }
+    showMention(input, matches, at);
+  });
+  input.addEventListener('keydown', (e)=>{
+    if(!mentionState || mentionState.input !== input) return;
+    if(e.key === 'ArrowDown'){ e.preventDefault(); mentionState.index = (mentionState.index+1) % mentionState.list.length; renderMentionActive(); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); mentionState.index = (mentionState.index-1+mentionState.list.length) % mentionState.list.length; renderMentionActive(); }
+    else if(e.key === 'Enter' || e.key === 'Tab'){
+      e.preventDefault(); e.stopPropagation();
+      pickMention(mentionState.list[mentionState.index]);
+    } else if(e.key === 'Escape'){ hideMention(); }
+  }, true);
+  input.addEventListener('blur', ()=>{ setTimeout(hideMention, 150); });
+}
+
+function showMention(input, list, atPos){
+  mentionState = { input, list, index: 0, atPos };
+  const pop = document.getElementById('mention-pop');
+  pop.innerHTML = list.map((u,i) => `<div class="mention-item ${i===0?'active':''}" data-i="${i}" onmousedown="event.preventDefault()" onclick="pickMentionByIndex(${i})"><div class="avatar">${esc(initials(u.full_name))}</div><div><div class="mi-name">${esc(u.full_name)}</div>${u.job_title?`<div class="mi-job">${esc(u.job_title)}</div>`:''}</div></div>`).join('');
+  pop.classList.remove('hidden');
+  const r = input.getBoundingClientRect();
+  pop.style.left = (window.scrollX + r.left) + 'px';
+  pop.style.top = (window.scrollY + r.top - pop.offsetHeight - 6) + 'px';
+}
+
+function renderMentionActive(){
+  document.querySelectorAll('#mention-pop .mention-item').forEach((el,i)=>{ el.classList.toggle('active', i===mentionState.index); });
+}
+
+function pickMentionByIndex(i){
+  if(!mentionState) return;
+  mentionState.index = i;
+  pickMention(mentionState.list[i]);
+}
+
+function pickMention(user){
+  if(!mentionState) return;
+  const inp = mentionState.input;
+  const val = inp.value;
+  const pos = inp.selectionStart;
+  const before = val.slice(0, mentionState.atPos);
+  const after = val.slice(pos);
+  const insert = '@' + user.full_name.replace(/\s+/g, '_') + ' ';
+  inp.value = before + insert + after;
+  const newPos = (before + insert).length;
+  inp.setSelectionRange(newPos, newPos);
+  inp.focus();
+  hideMention();
+}
+
+function hideMention(){
+  mentionState = null;
+  const pop = document.getElementById('mention-pop');
+  if(pop) pop.classList.add('hidden');
+}
+
+// Render @Name highlights inside any rendered message body
+function renderMentions(text){
+  // text already passed through linkify; we now style @Word_With_Underscores or @Word
+  return text.replace(/(^|[\s>])@([A-Za-z\u00C0-\u024F\u0600-\u06FF][A-Za-z0-9_\u00C0-\u024F\u0600-\u06FF]*)/g, (m, pre, name) => {
+    return pre + '<span class="mention-tag">@' + name.replace(/_/g,' ') + '</span>';
+  });
 }
 
 function esc(s){if(!s)return'';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}
