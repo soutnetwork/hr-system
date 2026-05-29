@@ -8,10 +8,37 @@ const cors = require('cors');
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'soutnetwork-hr-secret-2026-change-me';
+const ENC_SECRET = process.env.ENC_SECRET || 'soutnetwork-tools-enc-2026-change-me';
+const ENC_KEY = crypto.createHash('sha256').update(ENC_SECRET).digest(); // 32 bytes
+
+function encryptPwd(plain) {
+  if (!plain) return '';
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv);
+  const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // store as base64: iv|tag|ciphertext
+  return Buffer.concat([iv, tag, enc]).toString('base64');
+}
+function decryptPwd(blob) {
+  if (!blob) return '';
+  try {
+    const buf = Buffer.from(blob, 'base64');
+    const iv = buf.slice(0, 12);
+    const tag = buf.slice(12, 28);
+    const enc = buf.slice(28);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+  } catch (e) {
+    return '';
+  }
+}
 const DB_PATH = path.join(__dirname, 'hr.db');
 
 app.use(cors());
@@ -83,6 +110,16 @@ async function initDb() {
       name TEXT UNIQUE NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS tools (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      icon TEXT DEFAULT '',
+      username TEXT DEFAULT '',
+      password_enc TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   // migrations for older DBs
   try { db.run(`ALTER TABLE users ADD COLUMN daily_hours INTEGER DEFAULT 8`); } catch(e){}
@@ -93,6 +130,8 @@ async function initDb() {
   try { db.run(`ALTER TABLE team_tasks ADD COLUMN team TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE chat_messages ADD COLUMN room_id INTEGER DEFAULT 0`); } catch(e){}
+  try { db.run(`ALTER TABLE tools ADD COLUMN username TEXT DEFAULT ''`); } catch(e){}
+  try { db.run(`ALTER TABLE tools ADD COLUMN password_enc TEXT DEFAULT ''`); } catch(e){}
 
   // ensure a default Company room exists (id=1)
   if (!get(`SELECT id FROM chat_rooms WHERE is_company=1`)) {
@@ -301,6 +340,53 @@ app.get('/api/teammates', authenticate, (req, res) => {
 
 // ===== TEAMS =====
 // List teams (everyone can read; needed for filters/dropdowns)
+// ===== TOOLS (custom external links shown in top bar) =====
+// List tools — only mark whether a credential exists; never return password
+app.get('/api/tools', authenticate, (req, res) => {
+  const rows = all(`SELECT id, name, url, icon, username, password_enc, sort_order FROM tools ORDER BY sort_order, id`);
+  res.json(rows.map(r => ({
+    id: r.id, name: r.name, url: r.url, icon: r.icon, sort_order: r.sort_order,
+    username: r.username || '',
+    has_password: !!(r.password_enc && r.password_enc.length)
+  })));
+});
+// Reveal password (admin only) — separate endpoint so it's an explicit action
+app.get('/api/tools/:id/credentials', authenticate, requireAdmin, (req, res) => {
+  const t = get(`SELECT username, password_enc FROM tools WHERE id=?`, [req.params.id]);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json({ username: t.username || '', password: decryptPwd(t.password_enc || '') });
+});
+app.post('/api/tools', authenticate, requireAdmin, (req, res) => {
+  const { name, url, icon, username, password, sort_order } = req.body;
+  if (!name || !url) return res.status(400).json({ error: 'Name and URL are required' });
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'URL must start with http:// or https://' });
+  const enc = password ? encryptPwd(password) : '';
+  const r = runReturn(`INSERT INTO tools (name, url, icon, username, password_enc, sort_order) VALUES (?,?,?,?,?,?)`,
+    [name.trim(), url.trim(), (icon || '').trim(), (username || '').trim(), enc, sort_order || 0]);
+  res.json({ success: true, id: r.lastInsertRowid });
+});
+app.patch('/api/tools/:id', authenticate, requireAdmin, (req, res) => {
+  const { name, url, icon, username, password, sort_order } = req.body;
+  if (name !== undefined) run(`UPDATE tools SET name=? WHERE id=?`, [name, req.params.id]);
+  if (url !== undefined) {
+    if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'URL must start with http:// or https://' });
+    run(`UPDATE tools SET url=? WHERE id=?`, [url, req.params.id]);
+  }
+  if (icon !== undefined) run(`UPDATE tools SET icon=? WHERE id=?`, [icon, req.params.id]);
+  if (username !== undefined) run(`UPDATE tools SET username=? WHERE id=?`, [username, req.params.id]);
+  if (password !== undefined) {
+    // empty string clears the password; non-empty replaces it
+    run(`UPDATE tools SET password_enc=? WHERE id=?`, [password ? encryptPwd(password) : '', req.params.id]);
+  }
+  if (sort_order !== undefined) run(`UPDATE tools SET sort_order=? WHERE id=?`, [sort_order, req.params.id]);
+  res.json({ success: true });
+});
+app.delete('/api/tools/:id', authenticate, requireAdmin, (req, res) => {
+  run(`DELETE FROM tools WHERE id=?`, [req.params.id]);
+  res.json({ success: true });
+});
+
+// ===== TEAMS =====
 app.get('/api/teams', authenticate, (req, res) => {
   res.json(all(`SELECT id, name FROM teams ORDER BY name`));
 });
