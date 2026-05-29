@@ -1016,7 +1016,7 @@ function logout(){ if(timerInterval)clearInterval(timerInterval); if(chatInterva
 function showDashboard(){
   document.getElementById('login-page').classList.add('hidden');
   if(currentUser.role==='admin'){ document.getElementById('admin-page').classList.remove('hidden'); loadAdminEmployees(); setInterval(loadAdminEmployees,15000); }
-  else { document.getElementById('employee-page').classList.remove('hidden'); document.getElementById('emp-name').textContent=currentUser.full_name; loadEmpStatus(); loadEmpTasksOwn(); loadEmpAttendance(); setInterval(loadEmpStatus,30000); }
+  else { document.getElementById('employee-page').classList.remove('hidden'); loadEmpStatus(); loadEmpTasksOwn(); loadEmpAttendance(); setInterval(loadEmpStatus,30000); }
   // Wire up @mention behavior on chat inputs and task comment input
   const empInp=document.getElementById('emp-chat-input'); if(empInp && !empInp._mentionsAttached){ attachMention(empInp, ()=>'chat:'+(activeRooms.emp||0)); empInp._mentionsAttached=true; }
   const adInp=document.getElementById('admin-chat-input'); if(adInp && !adInp._mentionsAttached){ attachMention(adInp, ()=>'chat:'+(activeRooms.admin||0)); adInp._mentionsAttached=true; }
