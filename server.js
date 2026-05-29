@@ -120,6 +120,19 @@ async function initDb() {
       sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS time_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      entry_date DATE NOT NULL,
+      task_name TEXT NOT NULL,
+      project TEXT DEFAULT '',
+      client_tag TEXT DEFAULT '',
+      start_time TEXT DEFAULT '',
+      end_time TEXT DEFAULT '',
+      duration_minutes INTEGER DEFAULT 0,
+      note TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   // migrations for older DBs
   try { db.run(`ALTER TABLE users ADD COLUMN daily_hours INTEGER DEFAULT 8`); } catch(e){}
@@ -132,6 +145,7 @@ async function initDb() {
   try { db.run(`ALTER TABLE chat_messages ADD COLUMN room_id INTEGER DEFAULT 0`); } catch(e){}
   try { db.run(`ALTER TABLE tools ADD COLUMN username TEXT DEFAULT ''`); } catch(e){}
   try { db.run(`ALTER TABLE tools ADD COLUMN password_enc TEXT DEFAULT ''`); } catch(e){}
+  try { db.run(`ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''`); } catch(e){}
 
   // ensure a default Company room exists (id=1)
   if (!get(`SELECT id FROM chat_rooms WHERE is_company=1`)) {
@@ -183,11 +197,11 @@ app.post('/api/login', (req, res) => {
 
 // ===== PROFILE (any user — view/edit own profile, including avatar) =====
 app.get('/api/profile', authenticate, (req, res) => {
-  const u = get('SELECT id, username, full_name, role, job_title, team, is_lead, daily_hours, avatar FROM users WHERE id=?', [req.user.id]);
+  const u = get('SELECT id, username, full_name, role, job_title, team, is_lead, daily_hours, avatar, bio FROM users WHERE id=?', [req.user.id]);
   res.json(u || {});
 });
 app.put('/api/profile', authenticate, (req, res) => {
-  const { avatar, full_name } = req.body;
+  const { avatar, full_name, bio } = req.body;
   if (avatar !== undefined) {
     if (avatar && avatar.length > 200000) return res.status(400).json({ error: 'Image too large (max ~150KB after encoding). Please use a smaller image.' });
     run('UPDATE users SET avatar=? WHERE id=?', [avatar || '', req.user.id]);
@@ -195,6 +209,99 @@ app.put('/api/profile', authenticate, (req, res) => {
   if (full_name !== undefined && full_name.trim()) {
     run('UPDATE users SET full_name=? WHERE id=?', [full_name.trim(), req.user.id]);
   }
+  if (bio !== undefined) {
+    if (bio && bio.length > 2000) return res.status(400).json({ error: 'Bio too long (max 2000 chars).' });
+    run('UPDATE users SET bio=? WHERE id=?', [bio || '', req.user.id]);
+  }
+  res.json({ success: true });
+});
+
+// Public profile view (other users can see this)
+app.get('/api/users/:id/profile', authenticate, (req, res) => {
+  const u = get('SELECT id, full_name, role, job_title, team, is_lead, avatar, bio FROM users WHERE id=?', [req.params.id]);
+  if (!u) return res.status(404).json({ error: 'Not found' });
+  res.json(u);
+});
+
+// Directory: everyone grouped by team (employees only)
+app.get('/api/directory', authenticate, (req, res) => {
+  const users = all(`SELECT id, full_name, job_title, team, is_lead, avatar FROM users WHERE role='employee' ORDER BY team, full_name`);
+  res.json(users);
+});
+
+// ===== TIME ENTRIES (Clockify-like) =====
+// List entries: employees see their own; admin can pass ?user_id=N or ?team=NAME
+app.get('/api/time-entries', authenticate, (req, res) => {
+  const from = req.query.from || '1900-01-01';
+  const to   = req.query.to   || '2999-12-31';
+  if (req.user.role === 'admin') {
+    if (req.query.user_id) {
+      res.json(all(`SELECT te.*, u.full_name FROM time_entries te JOIN users u ON te.user_id=u.id
+                    WHERE te.user_id=? AND te.entry_date BETWEEN ? AND ?
+                    ORDER BY te.entry_date DESC, te.id DESC LIMIT 300`, [req.query.user_id, from, to]));
+    } else if (req.query.team) {
+      res.json(all(`SELECT te.*, u.full_name FROM time_entries te JOIN users u ON te.user_id=u.id
+                    WHERE u.team=? AND te.entry_date BETWEEN ? AND ?
+                    ORDER BY te.entry_date DESC, te.id DESC LIMIT 500`, [req.query.team, from, to]));
+    } else {
+      res.json(all(`SELECT te.*, u.full_name FROM time_entries te JOIN users u ON te.user_id=u.id
+                    WHERE te.entry_date BETWEEN ? AND ?
+                    ORDER BY te.entry_date DESC, te.id DESC LIMIT 500`, [from, to]));
+    }
+  } else {
+    res.json(all(`SELECT te.*, u.full_name FROM time_entries te JOIN users u ON te.user_id=u.id
+                  WHERE te.user_id=? AND te.entry_date BETWEEN ? AND ?
+                  ORDER BY te.entry_date DESC, te.id DESC LIMIT 300`, [req.user.id, from, to]));
+  }
+});
+// Create a new time entry (anyone for themselves; admin can pass user_id for someone else)
+app.post('/api/time-entries', authenticate, (req, res) => {
+  const { entry_date, task_name, project, client_tag, start_time, end_time, duration_minutes, note, user_id } = req.body;
+  if (!task_name || !task_name.trim()) return res.status(400).json({ error: 'Task name required' });
+  if (!entry_date) return res.status(400).json({ error: 'Date required' });
+  const uid = (req.user.role === 'admin' && user_id) ? user_id : req.user.id;
+  // calculate duration if start/end given but duration not provided
+  let dur = parseInt(duration_minutes, 10) || 0;
+  if (!dur && start_time && end_time) {
+    const [sh, sm] = start_time.split(':').map(n=>parseInt(n,10));
+    const [eh, em] = end_time.split(':').map(n=>parseInt(n,10));
+    if(!isNaN(sh) && !isNaN(eh)) {
+      let mins = (eh*60+em) - (sh*60+sm);
+      if (mins < 0) mins += 24*60; // crossed midnight
+      dur = mins;
+    }
+  }
+  const r = runReturn(`INSERT INTO time_entries (user_id, entry_date, task_name, project, client_tag, start_time, end_time, duration_minutes, note)
+                       VALUES (?,?,?,?,?,?,?,?,?)`,
+                       [uid, entry_date, task_name.trim(), project||'', client_tag||'', start_time||'', end_time||'', dur, note||'']);
+  res.json({ success: true, id: r.lastInsertRowid });
+});
+// Update a time entry (owner or admin)
+app.patch('/api/time-entries/:id', authenticate, (req, res) => {
+  const e = get('SELECT user_id FROM time_entries WHERE id=?', [req.params.id]);
+  if (!e) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && e.user_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+  const { entry_date, task_name, project, client_tag, start_time, end_time, duration_minutes, note } = req.body;
+  const fields = []; const vals = [];
+  if (entry_date !== undefined) { fields.push('entry_date=?'); vals.push(entry_date); }
+  if (task_name !== undefined) { fields.push('task_name=?'); vals.push(task_name); }
+  if (project !== undefined) { fields.push('project=?'); vals.push(project); }
+  if (client_tag !== undefined) { fields.push('client_tag=?'); vals.push(client_tag); }
+  if (start_time !== undefined) { fields.push('start_time=?'); vals.push(start_time); }
+  if (end_time !== undefined) { fields.push('end_time=?'); vals.push(end_time); }
+  if (duration_minutes !== undefined) { fields.push('duration_minutes=?'); vals.push(duration_minutes); }
+  if (note !== undefined) { fields.push('note=?'); vals.push(note); }
+  if (!fields.length) return res.json({ success: true });
+  vals.push(req.params.id);
+  run(`UPDATE time_entries SET ${fields.join(', ')} WHERE id=?`, vals);
+  res.json({ success: true });
+});
+// Delete a time entry (owner or admin)
+app.delete('/api/time-entries/:id', authenticate, (req, res) => {
+  const e = get('SELECT user_id FROM time_entries WHERE id=?', [req.params.id]);
+  if (!e) return res.status(404).json({ error: 'Not found' });
+  if (req.user.role !== 'admin' && e.user_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+  run('DELETE FROM time_entries WHERE id=?', [req.params.id]);
   res.json({ success: true });
 });
 
